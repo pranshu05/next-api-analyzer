@@ -1,0 +1,47 @@
+# Source files
+src/
+tsconfig.json
+tsup.config.ts
+
+# Development files
+.gitignore
+.eslintrc*
+.prettierrc*
+
+# Test files
+test/
+tests/
+__tests__/
+*.test.*
+*.spec.*
+
+# Documentation (keep README.md)
+docs/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+logs/
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Cache
+.cache/
+.parcel-cache/
+
+# Environment
+.env*
+
+# OS
+.DS_Store
+Thumbs.db

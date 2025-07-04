@@ -1,0 +1,72 @@
+{
+    "name": "next-api-analyzer",
+    "version": "1.0.0",
+    "description": "Analyze Next.js API routes for security, structure, and documentation",
+    "main": "./dist/index.js",
+    "module": "./dist/index.mjs",
+    "types": "./dist/index.d.ts",
+    "bin": {
+        "next-api-analyzer": "./dist/bin/api-analyzer.js"
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.mjs",
+            "require": "./dist/index.js"
+        },
+        "./lib/api-analyzer": {
+            "types": "./dist/lib/api-analyzer.d.ts",
+            "import": "./dist/lib/api-analyzer.mjs",
+            "require": "./dist/lib/api-analyzer.js"
+        },
+        "./examples/usage": {
+            "types": "./dist/examples/usage.d.ts",
+            "import": "./dist/examples/usage.mjs",
+            "require": "./dist/examples/usage.js"
+        }
+    },
+    "files": [
+        "dist",
+        "README.md",
+        "LICENSE"
+    ],
+    "scripts": {
+        "build": "tsup",
+        "dev": "tsup --watch",
+        "prepublishOnly": "npm run build",
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [
+        "nextjs",
+        "api",
+        "analyzer",
+        "security",
+        "documentation",
+        "openapi",
+        "cli"
+    ],
+    "author": "Pranshu Patel",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/pranshu05/next-api-analyzer.git"
+    },
+    "bugs": {
+        "url": "https://github.com/pranshu05/next-api-analyzer/issues"
+    },
+    "homepage": "https://github.com/pranshu05/next-api-analyzer#readme",
+    "devDependencies": {
+        "@types/node": "^20.0.0",
+        "tsup": "^8.0.0",
+        "typescript": "^5.0.0"
+    },
+    "dependencies": {
+        "commander": "^11.0.0"
+    },
+    "peerDependencies": {
+        "next": ">=12.0.0"
+    },
+    "engines": {
+        "node": ">=16.0.0"
+    }
+}
