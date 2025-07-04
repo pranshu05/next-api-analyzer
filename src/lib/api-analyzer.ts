@@ -66,7 +66,13 @@ export class NextApiAnalyzer {
     }
 
     private isApiFile(filename: string): boolean {
-        return filename.endsWith(".js") || filename.endsWith(".ts") || filename.endsWith(".tsx")
+        return (
+            filename.endsWith(".js") ||
+            filename.endsWith(".ts") ||
+            filename.endsWith(".tsx") ||
+            filename === "route.js" ||
+            filename === "route.ts"
+        )
     }
 
     private async analyzeFile(filePath: string): Promise<void> {
@@ -81,18 +87,94 @@ export class NextApiAnalyzer {
 
     private parseRouteInfo(filePath: string, content: string): ApiRouteInfo {
         const routePath = this.getRoutePath(filePath)
+        const isAppRouter = this.isAppRouterFile(filePath)
 
         return {
             path: routePath,
-            methods: this.extractMethods(content),
+            methods: isAppRouter ? this.extractAppRouterMethods(content) : this.extractMethods(content),
             hasAuth: this.detectAuth(content),
             authTypes: this.extractAuthTypes(content),
-            queryParams: this.extractQueryParams(content),
-            responseStatuses: this.extractResponseStatuses(content),
+            queryParams: isAppRouter ? this.extractAppRouterQueryParams(content) : this.extractQueryParams(content),
+            responseStatuses: isAppRouter
+                ? this.extractAppRouterResponseStatuses(content)
+                : this.extractResponseStatuses(content),
             middlewares: this.extractMiddlewares(content),
             description: this.extractDescription(content),
             parameters: this.extractParameters(content),
         }
+    }
+
+    private isAppRouterFile(filePath: string): boolean {
+        return filePath.includes("/route.") || filePath.endsWith("route.js") || filePath.endsWith("route.ts")
+    }
+
+    private extractAppRouterMethods(content: string): string[] {
+        const methods = new Set<string>()
+
+        const methodRegex = /export\s+(?:async\s+)?function\s+(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s*\(/g
+        let match
+        while ((match = methodRegex.exec(content)) !== null) {
+            methods.add(match[1])
+        }
+
+        const arrowMethodRegex = /export\s+const\s+(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s*=\s*(?:async\s*)?\(/g
+        while ((match = arrowMethodRegex.exec(content)) !== null) {
+            methods.add(match[1])
+        }
+
+        if (methods.size === 0) {
+            methods.add("GET")
+        }
+
+        return Array.from(methods)
+    }
+
+    private extractAppRouterQueryParams(content: string): string[] {
+        const params = new Set<string>()
+
+        const searchParamsRegex = /searchParams\.get$$['"`](\w+)['"`]$$/g
+        let match
+        while ((match = searchParamsRegex.exec(content)) !== null) {
+            params.add(match[1])
+        }
+
+        const urlSearchParamsRegex = /url\.searchParams\.get$$['"`](\w+)['"`]$$/g
+        while ((match = urlSearchParamsRegex.exec(content)) !== null) {
+            params.add(match[1])
+        }
+
+        const paramsRegex = /{\s*params\s*}.*{\s*(\w+)\s*}/g
+        while ((match = paramsRegex.exec(content)) !== null) {
+            params.add(match[1])
+        }
+
+        return Array.from(params)
+    }
+
+    private extractAppRouterResponseStatuses(content: string): number[] {
+        const statuses = new Set<number>()
+        let match
+
+        const responseJsonRegex = /Response\.json\([^,]*,\s*{\s*status:\s*(\d+)\s*}/g
+        while ((match = responseJsonRegex.exec(content)) !== null) {
+            statuses.add(Number.parseInt(match[1]))
+        }
+
+        const newResponseRegex = /new\s+Response\([^,]*,\s*{\s*status:\s*(\d+)\s*}/g
+        while ((match = newResponseRegex.exec(content)) !== null) {
+            statuses.add(Number.parseInt(match[1]))
+        }
+
+        const nextResponseRegex = /NextResponse\.json\([^,]*,\s*{\s*status:\s*(\d+)\s*}/g
+        while ((match = nextResponseRegex.exec(content)) !== null) {
+            statuses.add(Number.parseInt(match[1]))
+        }
+
+        if (statuses.size === 0) {
+            statuses.add(200)
+        }
+
+        return Array.from(statuses).sort()
     }
 
     private getRoutePath(filePath: string): string {
@@ -169,7 +251,10 @@ export class NextApiAnalyzer {
 
         const destructureRegex = /const\s*{\s*([^}]+)\s*}\s*=\s*req\.query/g
         while ((match = destructureRegex.exec(content)) !== null) {
-            const paramList = match[1].split(",").map((p) => p.trim())
+            const paramList = match[1]
+                .split(",")
+                .map((p) => p.trim())
+                .filter(Boolean)
             paramList.forEach((param) => {
                 const cleanParam = param.replace(/[:\s]/g, "").split(" ")[0]
                 if (cleanParam) params.add(cleanParam)
@@ -181,9 +266,9 @@ export class NextApiAnalyzer {
 
     private extractResponseStatuses(content: string): number[] {
         const statuses = new Set<number>()
+        let match
 
         const statusRegex = /res\.status$$(\d+)$$/g
-        let match
         while ((match = statusRegex.exec(content)) !== null) {
             statuses.add(Number.parseInt(match[1]))
         }
