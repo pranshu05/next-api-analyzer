@@ -4,12 +4,12 @@ import type { NextApiRequest, NextApiResponse } from "next"
 // 1. Basic CLI usage
 async function runBasicAnalysis() {
     console.log("Running basic API analysis...")
-    await analyzeApiRoutes() // Uses default 'pages/api' directory
+    await analyzeApiRoutes() // Uses default 'src/app/api' directory
 }
 
 // 2. Custom directory analysis
 async function runCustomAnalysis() {
-    const analyzer = new NextApiAnalyzer("src/pages/api")
+    const analyzer = new NextApiAnalyzer("src/app/api")
     const analysis = await analyzer.analyzeRoutes()
 
     console.log("Analysis Results:", analysis)
@@ -38,7 +38,7 @@ async function runFilteredAnalysis() {
 }
 
 // 4. Example API route with tracking middleware
-// pages/api/users/[id].ts
+// app/api/users/[id]/route.ts
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
     const { id } = req.query

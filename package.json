@@ -1,7 +1,7 @@
 {
     "name": "next-api-analyzer",
-    "version": "1.0.0",
-    "description": "Analyze Next.js API routes for security, structure, and documentation",
+    "version": "1.1.0",
+    "description": "Analyze Next.js API routes (App Router & Pages Router) for security, structure, and documentation",
     "main": "./dist/index.js",
     "module": "./dist/index.mjs",
     "types": "./dist/index.d.ts",

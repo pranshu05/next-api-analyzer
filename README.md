@@ -71,7 +71,7 @@ npx next-api-analyzer openapi --yaml --output api-spec.yaml
 import { NextApiAnalyzer, withApiTracking } from 'next-api-analyzer';
 
 // Analyze routes programmatically
-const analyzer = new NextApiAnalyzer('pages/api');
+const analyzer = new NextApiAnalyzer('/src/app/api');
 const analysis = await analyzer.analyzeRoutes();
 console.log(analysis);
 
@@ -92,7 +92,7 @@ Analyze your API routes and generate comprehensive reports.
 npx next-api-analyzer analyze [options]
 
 Options:
-  -d, --dir <directory>     API directory to analyze (default: "pages/api")
+  -d, --dir <directory>     API directory to analyze (default: "/src/app/api")
   -o, --output <file>       Output file for report (default: "api-analysis.md")
   -f, --format <format>     Output format: md, json, html (default: "md")
 ```
@@ -105,7 +105,7 @@ Perform security audit on your API routes.
 npx next-api-analyzer security [options]
 
 Options:
-  -d, --dir <directory>     API directory to analyze (default: "pages/api")
+  -d, --dir <directory>     API directory to analyze (default: "/src/app/api")
   -t, --threshold <number>  Security coverage threshold 0-100 (default: "80")
   --fail-on-threshold       Exit with error if threshold not met
 ```
@@ -118,7 +118,7 @@ Generate OpenAPI specification from your API routes.
 npx next-api-analyzer openapi [options]
 
 Options:
-  -d, --dir <directory>     API directory to analyze (default: "pages/api")
+  -d, --dir <directory>     API directory to analyze (default: "/arc/app/api")
   -o, --output <file>       Output file for spec (default: "openapi.json")
   --yaml                    Output in YAML format
 ```
@@ -131,7 +131,7 @@ Show quick statistics about your API routes.
 npx next-api-analyzer stats [options]
 
 Options:
-  -d, --dir <directory>     API directory to analyze (default: "pages/api")
+  -d, --dir <directory>     API directory to analyze (default: "/src/app/api")
 ```
 
 ### `watch`
@@ -142,7 +142,7 @@ Watch for changes and continuously analyze your API routes.
 npx next-api-analyzer watch [options]
 
 Options:
-  -d, --dir <directory>     API directory to watch (default: "pages/api")
+  -d, --dir <directory>     API directory to watch (default: "/src/app/api")
   -i, --interval <seconds>  Check interval in seconds (default: "5")
 ```
 
@@ -211,7 +211,7 @@ npm run api:security
 
 ```typescript
 class NextApiAnalyzer {
-  constructor(apiDir: string = 'pages/api')
+  constructor(apiDir: string = 'src/app/api')
   
   async analyzeRoutes(): Promise<ApiAnalysisResult>
   generateReport(analysis: ApiAnalysisResult): string
@@ -227,7 +227,7 @@ function withApiTracking(handler: NextApiHandler): NextApiHandler
 Add to your API routes for runtime tracking:
 
 ```typescript
-// pages/api/users/[id].ts
+// app/api/users/[id].ts
 import { withApiTracking } from 'next-api-analyzer';
 
 async function handler(req, res) {

@@ -1,173 +1,175 @@
-import { Command } from 'commander';
-import { NextApiAnalyzer } from '../lib/api-analyzer';
-import { OpenApiAnalyzer } from '../examples/usage';
-import fs from 'fs';
-import path from 'path';
+import { Command } from "commander"
+import { NextApiAnalyzer } from "../lib/api-analyzer"
+import { OpenApiAnalyzer } from "../examples/usage"
+import fs from "fs"
 
-const program = new Command();
-
-program
-    .name('next-api-analyzer')
-    .description('Analyze Next.js API routes for security, structure, and documentation')
-    .version('1.0.0');
+const program = new Command()
 
 program
-    .command('analyze')
-    .description('Analyze API routes and generate report')
-    .option('-d, --dir <directory>', 'API directory to analyze', 'pages/api')
-    .option('-o, --output <file>', 'Output file for report', 'api-analysis.md')
-    .option('-f, --format <format>', 'Output format (md, json, html)', 'md')
+    .name("next-api-analyzer")
+    .description("Analyze Next.js API routes for security, structure, and documentation")
+    .version("1.0.0")
+
+program
+    .command("analyze")
+    .description("Analyze API routes and generate report")
+    .option("-d, --dir <directory>", "API directory to analyze", "src/app/api")
+    .option("-o, --output <file>", "Output file for report", "api-analysis.md")
+    .option("-f, --format <format>", "Output format (md, json, html)", "md")
     .action(async (options) => {
         try {
-            console.log(`🔍 Analyzing API routes in: ${options.dir}`);
+            console.log(`🔍 Analyzing API routes in: ${options.dir}`)
 
-            const analyzer = new NextApiAnalyzer(options.dir);
-            const analysis = await analyzer.analyzeRoutes();
+            const analyzer = new NextApiAnalyzer(options.dir)
+            const analysis = await analyzer.analyzeRoutes()
 
-            let output: string;
+            let output: string
             switch (options.format) {
-                case 'json':
-                    output = JSON.stringify(analysis, null, 2);
-                    break;
-                case 'html':
-                    output = generateHtmlReport(analysis, analyzer);
-                    break;
+                case "json":
+                    output = JSON.stringify(analysis, null, 2)
+                    break
+                case "html":
+                    output = generateHtmlReport(analysis, analyzer)
+                    break
                 default:
-                    output = analyzer.generateReport(analysis);
+                    output = analyzer.generateReport(analysis)
             }
 
-            fs.writeFileSync(options.output, output);
-            console.log(`📊 Analysis complete! Report saved to: ${options.output}`);
+            fs.writeFileSync(options.output, output)
+            console.log(`📊 Analysis complete! Report saved to: ${options.output}`)
 
-            console.log('\n📋 Summary:');
-            console.log(`   Total Routes: ${analysis.summary.totalRoutes}`);
-            console.log(`   Secure Routes: ${analysis.summary.secureRoutes}`);
-            console.log(`   Public Routes: ${analysis.summary.publicRoutes}`);
-            console.log(`   Security Coverage: ${((analysis.summary.secureRoutes / analysis.summary.totalRoutes) * 100).toFixed(1)}%`);
-
+            console.log("\n📋 Summary:")
+            console.log(`   Total Routes: ${analysis.summary.totalRoutes}`)
+            console.log(`   Secure Routes: ${analysis.summary.secureRoutes}`)
+            console.log(`   Public Routes: ${analysis.summary.publicRoutes}`)
+            console.log(
+                `   Security Coverage: ${((analysis.summary.secureRoutes / analysis.summary.totalRoutes) * 100).toFixed(1)}%`,
+            )
         } catch (error) {
-            console.error('❌ Error analyzing API routes:', error);
-            process.exit(1);
+            console.error("❌ Error analyzing API routes:", error)
+            process.exit(1)
         }
-    });
+    })
 
 program
-    .command('security')
-    .description('Perform security audit on API routes')
-    .option('-d, --dir <directory>', 'API directory to analyze', 'pages/api')
-    .option('-t, --threshold <number>', 'Security coverage threshold (0-100)', '80')
-    .option('--fail-on-threshold', 'Exit with error if threshold not met')
+    .command("security")
+    .description("Perform security audit on API routes")
+    .option("-d, --dir <directory>", "API directory to analyze", "src/app/api")
+    .option("-t, --threshold <number>", "Security coverage threshold (0-100)", "80")
+    .option("--fail-on-threshold", "Exit with error if threshold not met")
     .action(async (options) => {
         try {
-            console.log('🔐 Running security audit...');
+            console.log("🔐 Running security audit...")
 
-            const analyzer = new NextApiAnalyzer(options.dir);
-            const analysis = await analyzer.analyzeRoutes();
+            const analyzer = new NextApiAnalyzer(options.dir)
+            const analysis = await analyzer.analyzeRoutes()
 
-            const securityCoverage = (analysis.summary.secureRoutes / analysis.summary.totalRoutes) * 100;
-            const threshold = parseInt(options.threshold);
+            const securityCoverage = (analysis.summary.secureRoutes / analysis.summary.totalRoutes) * 100
+            const threshold = Number.parseInt(options.threshold)
 
-            console.log('\n🛡️  Security Report:');
-            console.log(`   Security Coverage: ${securityCoverage.toFixed(1)}%`);
-            console.log(`   Secure Routes: ${analysis.summary.secureRoutes}/${analysis.summary.totalRoutes}`);
+            console.log("\n🛡️  Security Report:")
+            console.log(`   Security Coverage: ${securityCoverage.toFixed(1)}%`)
+            console.log(`   Secure Routes: ${analysis.summary.secureRoutes}/${analysis.summary.totalRoutes}`)
 
-            const vulnerableRoutes = analysis.routes.filter(route => !route.hasAuth);
+            const vulnerableRoutes = analysis.routes.filter((route) => !route.hasAuth)
             if (vulnerableRoutes.length > 0) {
-                console.log('\n⚠️  Vulnerable Routes:');
-                vulnerableRoutes.forEach(route => {
-                    const riskLevel = route.methods.some(m => ['POST', 'PUT', 'DELETE', 'PATCH'].includes(m)) ? 'HIGH' : 'MEDIUM';
-                    console.log(`   ${route.path} (${route.methods.join(', ')}) - Risk: ${riskLevel}`);
-                });
+                console.log("\n⚠️  Vulnerable Routes:")
+                vulnerableRoutes.forEach((route) => {
+                    const riskLevel = route.methods.some((m) => ["POST", "PUT", "DELETE", "PATCH"].includes(m))
+                        ? "HIGH"
+                        : "MEDIUM"
+                    console.log(`   ${route.path} (${route.methods.join(", ")}) - Risk: ${riskLevel}`)
+                })
             }
 
-            console.log('\n💡 Recommendations:');
+            console.log("\n💡 Recommendations:")
             if (vulnerableRoutes.length > 0) {
-                console.log('   - Add authentication to unprotected routes');
+                console.log("   - Add authentication to unprotected routes")
             }
-            console.log('   - Implement rate limiting for public endpoints');
-            console.log('   - Add input validation and sanitization');
-            console.log('   - Use HTTPS in production');
-            console.log('   - Implement proper error handling');
+            console.log("   - Implement rate limiting for public endpoints")
+            console.log("   - Add input validation and sanitization")
+            console.log("   - Use HTTPS in production")
+            console.log("   - Implement proper error handling")
 
             if (options.failOnThreshold && securityCoverage < threshold) {
-                console.error(`\n❌ Security coverage ${securityCoverage.toFixed(1)}% is below threshold ${threshold}%`);
-                process.exit(1);
+                console.error(`\n❌ Security coverage ${securityCoverage.toFixed(1)}% is below threshold ${threshold}%`)
+                process.exit(1)
             }
 
-            console.log('\n✅ Security audit complete!');
-
+            console.log("\n✅ Security audit complete!")
         } catch (error) {
-            console.error('❌ Error running security audit:', error);
-            process.exit(1);
+            console.error("❌ Error running security audit:", error)
+            process.exit(1)
         }
-    });
+    })
 
 program
-    .command('openapi')
-    .description('Generate OpenAPI specification from API routes')
-    .option('-d, --dir <directory>', 'API directory to analyze', 'pages/api')
-    .option('-o, --output <file>', 'Output file for OpenAPI spec', 'openapi.json')
-    .option('--yaml', 'Output in YAML format')
+    .command("openapi")
+    .description("Generate OpenAPI specification from API routes")
+    .option("-d, --dir <directory>", "API directory to analyze", "src/app/api")
+    .option("-o, --output <file>", "Output file for OpenAPI spec", "openapi.json")
+    .option("--yaml", "Output in YAML format")
     .action(async (options) => {
         try {
-            console.log('📋 Generating OpenAPI specification...');
+            console.log("📋 Generating OpenAPI specification...")
 
-            const analyzer = new OpenApiAnalyzer(options.dir);
-            const analysis = await analyzer.analyzeRoutes();
-            const spec = analyzer.generateOpenApiSpec(analysis);
+            const analyzer = new OpenApiAnalyzer(options.dir)
+            const analysis = await analyzer.analyzeRoutes()
+            const spec = analyzer.generateOpenApiSpec(analysis)
 
-            let output: string;
+            let output: string
             if (options.yaml) {
                 output = JSON.stringify(spec, null, 2)
-                    .replace(/"/g, '')
-                    .replace(/,\s*$/gm, '')
-                    .replace(/{\s*$/gm, '')
-                    .replace(/^\s*}/gm, '');
+                    .replace(/"/g, "")
+                    .replace(/,\s*$/gm, "")
+                    .replace(/{\s*$/gm, "")
+                    .replace(/^\s*}/gm, "")
             } else {
-                output = JSON.stringify(spec, null, 2);
+                output = JSON.stringify(spec, null, 2)
             }
 
-            fs.writeFileSync(options.output, output);
-            console.log(`📄 OpenAPI specification generated: ${options.output}`);
-
+            fs.writeFileSync(options.output, output)
+            console.log(`📄 OpenAPI specification generated: ${options.output}`)
         } catch (error) {
-            console.error('❌ Error generating OpenAPI spec:', error);
-            process.exit(1);
+            console.error("❌ Error generating OpenAPI spec:", error)
+            process.exit(1)
         }
-    });
+    })
 
 program
-    .command('watch')
-    .description('Watch API routes for changes and re-analyze')
-    .option('-d, --dir <directory>', 'API directory to watch', 'pages/api')
-    .option('-i, --interval <seconds>', 'Check interval in seconds', '5')
+    .command("watch")
+    .description("Watch API routes for changes and re-analyze")
+    .option("-d, --dir <directory>", "API directory to watch", "src/app/api")
+    .option("-i, --interval <seconds>", "Check interval in seconds", "5")
     .action(async (options) => {
-        console.log(`👀 Watching ${options.dir} for changes...`);
+        console.log(`👀 Watching ${options.dir} for changes...`)
 
-        const analyzer = new NextApiAnalyzer(options.dir);
-        let lastAnalysis = await analyzer.analyzeRoutes();
+        const analyzer = new NextApiAnalyzer(options.dir)
+        let lastAnalysis = await analyzer.analyzeRoutes()
 
         setInterval(async () => {
             try {
-                const currentAnalysis = await analyzer.analyzeRoutes();
+                const currentAnalysis = await analyzer.analyzeRoutes()
 
                 if (JSON.stringify(currentAnalysis) !== JSON.stringify(lastAnalysis)) {
-                    console.log('\n🔄 Changes detected! Re-analyzing...');
+                    console.log("\n🔄 Changes detected! Re-analyzing...")
 
-                    const report = analyzer.generateReport(currentAnalysis);
-                    fs.writeFileSync('api-analysis-watch.md', report);
+                    const report = analyzer.generateReport(currentAnalysis)
+                    fs.writeFileSync("api-analysis-watch.md", report)
 
-                    console.log('📊 Analysis updated!');
-                    console.log(`   Total Routes: ${currentAnalysis.summary.totalRoutes}`);
-                    console.log(`   Security Coverage: ${((currentAnalysis.summary.secureRoutes / currentAnalysis.summary.totalRoutes) * 100).toFixed(1)}%`);
+                    console.log("📊 Analysis updated!")
+                    console.log(`   Total Routes: ${currentAnalysis.summary.totalRoutes}`)
+                    console.log(
+                        `   Security Coverage: ${((currentAnalysis.summary.secureRoutes / currentAnalysis.summary.totalRoutes) * 100).toFixed(1)}%`,
+                    )
 
-                    lastAnalysis = currentAnalysis;
+                    lastAnalysis = currentAnalysis
                 }
             } catch (error) {
-                console.error('❌ Error during watch:', error);
+                console.error("❌ Error during watch:", error)
             }
-        }, parseInt(options.interval) * 1000);
-    });
+        }, Number.parseInt(options.interval) * 1000)
+    })
 
 function generateHtmlReport(analysis: any, analyzer: NextApiAnalyzer): string {
     return `
@@ -364,174 +366,218 @@ function generateHtmlReport(analysis: any, analyzer: NextApiAnalyzer): string {
                 <div class="methods-breakdown">
                     <h3>HTTP Methods Distribution</h3>
                     <div style="display: flex; gap: 15px; flex-wrap: wrap; justify-content: center;">
-                        ${Object.entries(analysis.summary.methodsBreakdown).map(([method, count]) => `
+                        ${Object.entries(analysis.summary.methodsBreakdown)
+            .map(
+                ([method, count]) => `
                             <div class="method-stat">
                                 <div class="stat-value">${count}</div>
                                 <div class="stat-label">${method}</div>
                             </div>
-                        `).join('')}
+                        `,
+            )
+            .join("")}
                     </div>
                 </div>
 
                 <h2>📋 Route Details</h2>
-                ${analysis.routes.map((route: any) => `
+                ${analysis.routes
+            .map(
+                (route: any) => `
                     <div class="route-card">
                         <div class="route-header">
                             <div class="route-path">${route.path}</div>
-                            <div class="auth-status ${route.hasAuth ? 'secured' : 'public'}">
-                                ${route.hasAuth ? '🔒 Secured' : '🔓 Public'}
+                            <div class="auth-status ${route.hasAuth ? "secured" : "public"}">
+                                ${route.hasAuth ? "🔒 Secured" : "🔓 Public"}
                             </div>
                         </div>
                         
                         <div style="margin-bottom: 15px;">
-                            ${route.methods.map((method: string) => `
+                            ${route.methods
+                        .map(
+                            (method: string) => `
                                 <span class="method-tag ${method}">${method}</span>
-                            `).join('')}
+                            `,
+                        )
+                        .join("")}
                         </div>
 
                         <div class="route-details">
-                            ${route.authTypes.length > 0 ? `
+                            ${route.authTypes.length > 0
+                        ? `
                                 <div class="detail-group">
                                     <div class="detail-title">🔐 Authentication</div>
                                     <div class="detail-list">
-                                        ${route.authTypes.map((type: string) => `
+                                        ${route.authTypes
+                            .map(
+                                (type: string) => `
                                             <span class="detail-item">${type}</span>
-                                        `).join('')}
+                                        `,
+                            )
+                            .join("")}
                                     </div>
                                 </div>
-                            ` : ''}
+                            `
+                        : ""
+                    }
                             
-                            ${route.queryParams.length > 0 ? `
+                            ${route.queryParams.length > 0
+                        ? `
                                 <div class="detail-group">
                                     <div class="detail-title">🔍 Query Parameters</div>
                                     <div class="detail-list">
-                                        ${route.queryParams.map((param: string) => `
+                                        ${route.queryParams
+                            .map(
+                                (param: string) => `
                                             <span class="detail-item">${param}</span>
-                                        `).join('')}
+                                        `,
+                            )
+                            .join("")}
                                     </div>
                                 </div>
-                            ` : ''}
+                            `
+                        : ""
+                    }
                             
                             <div class="detail-group">
                                 <div class="detail-title">📊 Response Status Codes</div>
                                 <div class="detail-list">
-                                    ${route.responseStatuses.map((status: number) => `
-                                        <span class="detail-item ${status >= 400 ? 'error' : 'success'}">${status}</span>
-                                    `).join('')}
+                                    ${route.responseStatuses
+                        .map(
+                            (status: number) => `
+                                        <span class="detail-item ${status >= 400 ? "error" : "success"}">${status}</span>
+                                    `,
+                        )
+                        .join("")}
                                 </div>
                             </div>
                             
-                            ${route.middlewares.length > 0 ? `
+                            ${route.middlewares.length > 0
+                        ? `
                                 <div class="detail-group">
                                     <div class="detail-title">🔧 Middlewares</div>
                                     <div class="detail-list">
-                                        ${route.middlewares.map((middleware: string) => `
+                                        ${route.middlewares
+                            .map(
+                                (middleware: string) => `
                                             <span class="detail-item">${middleware}</span>
-                                        `).join('')}
+                                        `,
+                            )
+                            .join("")}
                                     </div>
                                 </div>
-                            ` : ''}
+                            `
+                        : ""
+                    }
                         </div>
                         
-                        ${route.description ? `
+                        ${route.description
+                        ? `
                             <div style="margin-top: 15px; padding: 10px; background: #e8f4f8; border-radius: 4px;">
                                 <strong>Description:</strong> ${route.description}
                             </div>
-                        ` : ''}
+                        `
+                        : ""
+                    }
                     </div>
-                `).join('')}
+                `,
+            )
+            .join("")}
             </div>
         </body>
         </html>
-  `.trim();
+  `.trim()
 }
 
 program
-    .command('stats')
-    .description('Show quick statistics about API routes')
-    .option('-d, --dir <directory>', 'API directory to analyze', 'pages/api')
+    .command("stats")
+    .description("Show quick statistics about API routes")
+    .option("-d, --dir <directory>", "API directory to analyze", "src/app/api")
     .action(async (options) => {
         try {
-            const analyzer = new NextApiAnalyzer(options.dir);
-            const analysis = await analyzer.analyzeRoutes();
+            const analyzer = new NextApiAnalyzer(options.dir)
+            const analysis = await analyzer.analyzeRoutes()
 
-            console.log('\n📊 API Routes Statistics\n');
-            console.log(`📁 Directory: ${options.dir}`);
-            console.log(`📋 Total Routes: ${analysis.summary.totalRoutes}`);
-            console.log(`🔒 Secure Routes: ${analysis.summary.secureRoutes}`);
-            console.log(`🔓 Public Routes: ${analysis.summary.publicRoutes}`);
-            console.log(`🛡️  Security Coverage: ${((analysis.summary.secureRoutes / analysis.summary.totalRoutes) * 100).toFixed(1)}%`);
+            console.log("\n📊 API Routes Statistics\n")
+            console.log(`📁 Directory: ${options.dir}`)
+            console.log(`📋 Total Routes: ${analysis.summary.totalRoutes}`)
+            console.log(`🔒 Secure Routes: ${analysis.summary.secureRoutes}`)
+            console.log(`🔓 Public Routes: ${analysis.summary.publicRoutes}`)
+            console.log(
+                `🛡️  Security Coverage: ${((analysis.summary.secureRoutes / analysis.summary.totalRoutes) * 100).toFixed(1)}%`,
+            )
 
-            console.log('\n📈 HTTP Methods:');
+            console.log("\n📈 HTTP Methods:")
             Object.entries(analysis.summary.methodsBreakdown).forEach(([method, count]) => {
-                console.log(`   ${method}: ${count}`);
-            });
+                console.log(`   ${method}: ${count}`)
+            })
 
             const vulnerableRoutes = analysis.routes
-                .filter(route => !route.hasAuth)
-                .filter(route => route.methods.some(m => ['POST', 'PUT', 'DELETE', 'PATCH'].includes(m)))
-                .slice(0, 5);
+                .filter((route) => !route.hasAuth)
+                .filter((route) => route.methods.some((m) => ["POST", "PUT", "DELETE", "PATCH"].includes(m)))
+                .slice(0, 5)
 
             if (vulnerableRoutes.length > 0) {
-                console.log('\n⚠️  High Risk Routes (Unprotected + Mutating):');
-                vulnerableRoutes.forEach(route => {
-                    console.log(`   ${route.path} (${route.methods.join(', ')})`);
-                });
+                console.log("\n⚠️  High Risk Routes (Unprotected + Mutating):")
+                vulnerableRoutes.forEach((route) => {
+                    console.log(`   ${route.path} (${route.methods.join(", ")})`)
+                })
             }
-
         } catch (error) {
-            console.error('❌ Error generating stats:', error);
-            process.exit(1);
+            console.error("❌ Error generating stats:", error)
+            process.exit(1)
         }
-    });
+    })
 
 program
-    .command('compare <file1> <file2>')
-    .description('Compare two analysis reports')
+    .command("compare <file1> <file2>")
+    .description("Compare two analysis reports")
     .action(async (file1, file2) => {
         try {
-            const analysis1 = JSON.parse(fs.readFileSync(file1, 'utf-8'));
-            const analysis2 = JSON.parse(fs.readFileSync(file2, 'utf-8'));
+            const analysis1 = JSON.parse(fs.readFileSync(file1, "utf-8"))
+            const analysis2 = JSON.parse(fs.readFileSync(file2, "utf-8"))
 
-            console.log('\n📊 Analysis Comparison\n');
+            console.log("\n📊 Analysis Comparison\n")
 
-            console.log('📋 Route Count Changes:');
-            console.log(`   Before: ${analysis1.summary.totalRoutes} routes`);
-            console.log(`   After: ${analysis2.summary.totalRoutes} routes`);
-            console.log(`   Change: ${analysis2.summary.totalRoutes - analysis1.summary.totalRoutes > 0 ? '+' : ''}${analysis2.summary.totalRoutes - analysis1.summary.totalRoutes}`);
+            console.log("📋 Route Count Changes:")
+            console.log(`   Before: ${analysis1.summary.totalRoutes} routes`)
+            console.log(`   After: ${analysis2.summary.totalRoutes} routes`)
+            console.log(
+                `   Change: ${analysis2.summary.totalRoutes - analysis1.summary.totalRoutes > 0 ? "+" : ""}${analysis2.summary.totalRoutes - analysis1.summary.totalRoutes}`,
+            )
 
-            console.log('\n🔒 Security Changes:');
-            const secCoverage1 = (analysis1.summary.secureRoutes / analysis1.summary.totalRoutes) * 100;
-            const secCoverage2 = (analysis2.summary.secureRoutes / analysis2.summary.totalRoutes) * 100;
-            console.log(`   Before: ${secCoverage1.toFixed(1)}%`);
-            console.log(`   After: ${secCoverage2.toFixed(1)}%`);
-            console.log(`   Change: ${secCoverage2 - secCoverage1 > 0 ? '+' : ''}${(secCoverage2 - secCoverage1).toFixed(1)}%`);
+            console.log("\n🔒 Security Changes:")
+            const secCoverage1 = (analysis1.summary.secureRoutes / analysis1.summary.totalRoutes) * 100
+            const secCoverage2 = (analysis2.summary.secureRoutes / analysis2.summary.totalRoutes) * 100
+            console.log(`   Before: ${secCoverage1.toFixed(1)}%`)
+            console.log(`   After: ${secCoverage2.toFixed(1)}%`)
+            console.log(
+                `   Change: ${secCoverage2 - secCoverage1 > 0 ? "+" : ""}${(secCoverage2 - secCoverage1).toFixed(1)}%`,
+            )
 
-            const routes1 = new Set(analysis1.routes.map((r: any) => r.path));
-            const routes2 = new Set(analysis2.routes.map((r: any) => r.path));
-            const newRoutes = analysis2.routes.filter((r: any) => !routes1.has(r.path));
-            const removedRoutes = analysis1.routes.filter((r: any) => !routes2.has(r.path));
+            const routes1 = new Set(analysis1.routes.map((r: any) => r.path))
+            const routes2 = new Set(analysis2.routes.map((r: any) => r.path))
+            const newRoutes = analysis2.routes.filter((r: any) => !routes1.has(r.path))
+            const removedRoutes = analysis1.routes.filter((r: any) => !routes2.has(r.path))
 
             if (newRoutes.length > 0) {
-                console.log('\n✅ New Routes:');
+                console.log("\n✅ New Routes:")
                 newRoutes.forEach((route: any) => {
-                    console.log(`   ${route.path} (${route.methods.join(', ')}) - ${route.hasAuth ? '🔒' : '🔓'}`);
-                });
+                    console.log(`   ${route.path} (${route.methods.join(", ")}) - ${route.hasAuth ? "🔒" : "🔓"}`)
+                })
             }
 
             if (removedRoutes.length > 0) {
-                console.log('\n❌ Removed Routes:');
+                console.log("\n❌ Removed Routes:")
                 removedRoutes.forEach((route: any) => {
-                    console.log(`   ${route.path} (${route.methods.join(', ')})`);
-                });
+                    console.log(`   ${route.path} (${route.methods.join(", ")})`)
+                })
             }
-
         } catch (error) {
-            console.error('❌ Error comparing reports:', error);
-            process.exit(1);
+            console.error("❌ Error comparing reports:", error)
+            process.exit(1)
         }
-    });
+    })
 
-program.parse();
+program.parse()
 
-export { program, generateHtmlReport };
+export { program, generateHtmlReport }
