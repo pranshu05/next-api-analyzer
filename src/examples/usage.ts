@@ -135,6 +135,7 @@ class OpenApiAnalyzer extends NextApiAnalyzer {
                 description: "Auto-generated API documentation",
             },
             paths: {} as any,
+            components: {} as any,
         }
 
         analysis.routes.forEach((route: any) => {
