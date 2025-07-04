@@ -9,7 +9,7 @@ async function runBasicAnalysis() {
 
 // 2. Custom directory analysis
 async function runCustomAnalysis() {
-    const analyzer = new NextApiAnalyzer("src/app/api")
+    const analyzer = new NextApiAnalyzer({ apiDir: 'src/app/api' })
     const analysis = await analyzer.analyzeRoutes()
 
     console.log("Analysis Results:", analysis)
@@ -194,6 +194,22 @@ class OpenApiAnalyzer extends NextApiAnalyzer {
     }
 }
 
+// 8. Security Analysis and Performance Analysis
+async function runEnhancedAnalysis() {
+    const analyzer = new NextApiAnalyzer({
+        apiDir: 'src/app/api',
+        enableSecurityAnalysis: true,
+        enablePerformanceAnalysis: true
+    })
+    const analysis = await analyzer.analyzeRoutes()
+
+    console.log("Analysis Results:", analysis)
+
+    // Generate and save custom report
+    const report = analyzer.generateReport(analysis)
+    console.log(report)
+}
+
 export {
     runBasicAnalysis,
     runCustomAnalysis,
@@ -202,4 +218,5 @@ export {
     cicdIntegration,
     OpenApiAnalyzer,
     trackedHandler,
+    runEnhancedAnalysis,
 }

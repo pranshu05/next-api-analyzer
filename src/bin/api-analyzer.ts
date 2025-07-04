@@ -1,583 +1,731 @@
 import { Command } from "commander"
+import chalk from "chalk"
 import { NextApiAnalyzer } from "../lib/api-analyzer"
-import { OpenApiAnalyzer } from "../examples/usage"
+import { FileUtils } from "../utils/file-utils"
+import { logger } from "../utils/logger"
+import type { AnalyzerConfig } from "../types"
 import fs from "fs"
+import path from "path"
 
 const program = new Command()
 
 program
     .name("next-api-analyzer")
-    .description("Analyze Next.js API routes for security, structure, and documentation")
-    .version("1.0.0")
+    .description("Next.js API routes analyzer for security, performance, and maintainability")
+    .version("2.0.0")
+
+program
+    .option("-v, --verbose", "Enable verbose logging")
+    .option("-c, --config <file>", "Configuration file path")
+    .hook("preAction", (thisCommand) => {
+        const opts = thisCommand.opts()
+        if (opts.verbose) {
+            logger.setVerbose(true)
+        }
+    })
 
 program
     .command("analyze")
-    .description("Analyze API routes and generate report")
+    .description("Comprehensive analysis of API routes")
     .option("-d, --dir <directory>", "API directory to analyze", "src/app/api")
-    .option("-o, --output <file>", "Output file for report", "api-analysis.md")
-    .option("-f, --format <format>", "Output format (md, json, html)", "md")
+    .option("-o, --output <directory>", "Output directory for reports", "./api-analysis")
+    .option("-f, --format <format>", "Output format (md, json, html, all)", "md")
+    .option("--include-trends", "Include trend analysis", false)
+    .option("--performance", "Enable performance analysis", true)
+    .option("--security", "Enable security analysis", true)
     .action(async (options) => {
         try {
-            console.log(`🔍 Analyzing API routes in: ${options.dir}`)
+            logger.info("🚀 Starting API analysis...")
 
-            const analyzer = new NextApiAnalyzer(options.dir)
+            const config = await loadConfig(options.config, {
+                apiDir: options.dir,
+                outputDir: options.output,
+                enableTrends: options.includeTrends,
+                enablePerformanceAnalysis: options.performance,
+                enableSecurityAnalysis: options.security,
+            })
+
+            const analyzer = new NextApiAnalyzer(config)
             const analysis = await analyzer.analyzeRoutes()
 
-            let output: string
-            switch (options.format) {
-                case "json":
-                    output = JSON.stringify(analysis, null, 2)
-                    break
-                case "html":
-                    output = generateHtmlReport(analysis, analyzer)
-                    break
-                default:
-                    output = analyzer.generateReport(analysis)
+            const formats = options.format === "all" ? ["md", "json", "html"] : [options.format]
+
+            for (const format of formats) {
+                await generateReport(analyzer, analysis, format, config.outputDir)
             }
 
-            fs.writeFileSync(options.output, output)
-            console.log(`📊 Analysis complete! Report saved to: ${options.output}`)
+            displaySummary(analysis)
 
-            console.log("\n📋 Summary:")
-            console.log(`   Total Routes: ${analysis.summary.totalRoutes}`)
-            console.log(`   Secure Routes: ${analysis.summary.secureRoutes}`)
-            console.log(`   Public Routes: ${analysis.summary.publicRoutes}`)
-            console.log(
-                `   Security Coverage: ${((analysis.summary.secureRoutes / analysis.summary.totalRoutes) * 100).toFixed(1)}%`,
-            )
+            logger.success(`✅ Analysis complete! Reports saved to: ${config.outputDir}`)
         } catch (error) {
-            console.error("❌ Error analyzing API routes:", error)
+            logger.error("Analysis failed:", error)
             process.exit(1)
         }
     })
 
 program
     .command("security")
-    .description("Perform security audit on API routes")
+    .description("Security-focused analysis with detailed vulnerability assessment")
     .option("-d, --dir <directory>", "API directory to analyze", "src/app/api")
-    .option("-t, --threshold <number>", "Security coverage threshold (0-100)", "80")
+    .option("-t, --threshold <number>", "Security score threshold (0-100)", "80")
     .option("--fail-on-threshold", "Exit with error if threshold not met")
+    .option("--export-sarif", "Export results in SARIF format for CI/CD")
     .action(async (options) => {
         try {
-            console.log("🔐 Running security audit...")
+            logger.info("🔐 Running comprehensive security audit...")
 
-            const analyzer = new NextApiAnalyzer(options.dir)
+            const config = await loadConfig(options.config, {
+                apiDir: options.dir,
+                enableSecurityAnalysis: true,
+            })
+
+            const analyzer = new NextApiAnalyzer(config)
             const analysis = await analyzer.analyzeRoutes()
 
-            const securityCoverage = (analysis.summary.secureRoutes / analysis.summary.totalRoutes) * 100
+            const securityScore = analysis.summary.securityScore
             const threshold = Number.parseInt(options.threshold)
 
-            console.log("\n🛡️  Security Report:")
-            console.log(`   Security Coverage: ${securityCoverage.toFixed(1)}%`)
-            console.log(`   Secure Routes: ${analysis.summary.secureRoutes}/${analysis.summary.totalRoutes}`)
+            displaySecurityReport(analysis)
 
-            const vulnerableRoutes = analysis.routes.filter((route) => !route.hasAuth)
-            if (vulnerableRoutes.length > 0) {
-                console.log("\n⚠️  Vulnerable Routes:")
-                vulnerableRoutes.forEach((route) => {
-                    const riskLevel = route.methods.some((m) => ["POST", "PUT", "DELETE", "PATCH"].includes(m))
-                        ? "HIGH"
-                        : "MEDIUM"
-                    console.log(`   ${route.path} (${route.methods.join(", ")}) - Risk: ${riskLevel}`)
-                })
+            if (options.exportSarif) {
+                await exportSarif(analysis, config.outputDir)
             }
 
-            console.log("\n💡 Recommendations:")
-            if (vulnerableRoutes.length > 0) {
-                console.log("   - Add authentication to unprotected routes")
-            }
-            console.log("   - Implement rate limiting for public endpoints")
-            console.log("   - Add input validation and sanitization")
-            console.log("   - Use HTTPS in production")
-            console.log("   - Implement proper error handling")
-
-            if (options.failOnThreshold && securityCoverage < threshold) {
-                console.error(`\n❌ Security coverage ${securityCoverage.toFixed(1)}% is below threshold ${threshold}%`)
+            if (options.failOnThreshold && securityScore < threshold) {
+                logger.error(`Security score ${securityScore.toFixed(1)}% is below threshold ${threshold}%`)
                 process.exit(1)
             }
 
-            console.log("\n✅ Security audit complete!")
+            logger.success("🛡️ Security audit complete!")
         } catch (error) {
-            console.error("❌ Error running security audit:", error)
+            logger.error("Security audit failed:", error)
             process.exit(1)
         }
     })
 
 program
-    .command("openapi")
-    .description("Generate OpenAPI specification from API routes")
+    .command("performance")
+    .description("Performance analysis with optimization recommendations")
     .option("-d, --dir <directory>", "API directory to analyze", "src/app/api")
-    .option("-o, --output <file>", "Output file for OpenAPI spec", "openapi.json")
-    .option("--yaml", "Output in YAML format")
+    .option("--benchmark", "Run performance benchmarks")
     .action(async (options) => {
         try {
-            console.log("📋 Generating OpenAPI specification...")
+            logger.info("⚡ Running performance analysis...")
 
-            const analyzer = new OpenApiAnalyzer(options.dir)
+            const config = await loadConfig(options.config, {
+                apiDir: options.dir,
+                enablePerformanceAnalysis: true,
+            })
+
+            const analyzer = new NextApiAnalyzer(config)
             const analysis = await analyzer.analyzeRoutes()
-            const spec = analyzer.generateOpenApiSpec(analysis)
 
-            let output: string
-            if (options.yaml) {
-                output = JSON.stringify(spec, null, 2)
-                    .replace(/"/g, "")
-                    .replace(/,\s*$/gm, "")
-                    .replace(/{\s*$/gm, "")
-                    .replace(/^\s*}/gm, "")
-            } else {
-                output = JSON.stringify(spec, null, 2)
+            displayPerformanceReport(analysis)
+
+            if (options.benchmark) {
+                logger.info("🏃 Running benchmarks...")
             }
 
-            fs.writeFileSync(options.output, output)
-            console.log(`📄 OpenAPI specification generated: ${options.output}`)
+            logger.success("⚡ Performance analysis complete!")
         } catch (error) {
-            console.error("❌ Error generating OpenAPI spec:", error)
+            logger.error("Performance analysis failed:", error)
             process.exit(1)
         }
     })
 
 program
-    .command("watch")
-    .description("Watch API routes for changes and re-analyze")
-    .option("-d, --dir <directory>", "API directory to watch", "src/app/api")
-    .option("-i, --interval <seconds>", "Check interval in seconds", "5")
+    .command("trends")
+    .description("Analyze trends over time")
+    .option("-d, --dir <directory>", "API directory to analyze", "src/app/api")
+    .option("--days <number>", "Number of days to analyze", "30")
     .action(async (options) => {
-        console.log(`👀 Watching ${options.dir} for changes...`)
+        try {
+            logger.info("📈 Analyzing trends...")
 
-        const analyzer = new NextApiAnalyzer(options.dir)
-        let lastAnalysis = await analyzer.analyzeRoutes()
+            const trendsFile = path.join("./api-analysis", "trends.json")
+            const trends = FileUtils.readJsonFile(trendsFile)
 
-        setInterval(async () => {
-            try {
-                const currentAnalysis = await analyzer.analyzeRoutes()
-
-                if (JSON.stringify(currentAnalysis) !== JSON.stringify(lastAnalysis)) {
-                    console.log("\n🔄 Changes detected! Re-analyzing...")
-
-                    const report = analyzer.generateReport(currentAnalysis)
-                    fs.writeFileSync("api-analysis-watch.md", report)
-
-                    console.log("📊 Analysis updated!")
-                    console.log(`   Total Routes: ${currentAnalysis.summary.totalRoutes}`)
-                    console.log(
-                        `   Security Coverage: ${((currentAnalysis.summary.secureRoutes / currentAnalysis.summary.totalRoutes) * 100).toFixed(1)}%`,
-                    )
-
-                    lastAnalysis = currentAnalysis
-                }
-            } catch (error) {
-                console.error("❌ Error during watch:", error)
+            if (!Array.isArray(trends) || trends.length === 0) {
+                logger.warning("No trend data available. Run analysis with --include-trends first.")
+                return
             }
-        }, Number.parseInt(options.interval) * 1000)
+
+            displayTrendsReport(trends, Number.parseInt(options.days))
+        } catch (error) {
+            logger.error("Trends analysis failed:", error)
+            process.exit(1)
+        }
     })
 
-function generateHtmlReport(analysis: any, analyzer: NextApiAnalyzer): string {
+program
+    .command("compare <baseline> <current>")
+    .description("Compare two analysis reports")
+    .action(async (baseline, current) => {
+        try {
+            logger.info("🔄 Comparing analysis reports...")
+
+            const baselineData = FileUtils.readJsonFile(baseline)
+            const currentData = FileUtils.readJsonFile(current)
+
+            if (!baselineData || !currentData) {
+                logger.error("Could not read comparison files")
+                process.exit(1)
+            }
+
+            displayComparisonReport(baselineData, currentData)
+        } catch (error) {
+            logger.error("Comparison failed:", error)
+            process.exit(1)
+        }
+    })
+
+program
+    .command("init")
+    .description("Initialize configuration file")
+    .option("-f, --force", "Overwrite existing configuration")
+    .action(async (options) => {
+        try {
+            const configPath = "api-analyzer.config.json"
+
+            if (fs.existsSync(configPath) && !options.force) {
+                logger.warning("Configuration file already exists. Use --force to overwrite.")
+                return
+            }
+
+            const defaultConfig = {
+                apiDir: "src/app/api",
+                outputDir: "./api-analysis",
+                includePatterns: ["**/*.ts", "**/*.js", "**/*.tsx"],
+                excludePatterns: ["**/node_modules/**", "**/*.test.*", "**/*.spec.*"],
+                enableTrends: true,
+                enablePerformanceAnalysis: true,
+                enableSecurityAnalysis: true,
+                thresholds: {
+                    security: 80,
+                    performance: 70,
+                    maintainability: 75,
+                    testCoverage: 80,
+                },
+            }
+
+            FileUtils.writeJsonFile(configPath, defaultConfig)
+            logger.success(`✅ Configuration file created: ${configPath}`)
+        } catch (error) {
+            logger.error("Failed to create configuration:", error)
+            process.exit(1)
+        }
+    })
+
+async function loadConfig(configPath?: string, overrides: Partial<AnalyzerConfig> = {}): Promise<AnalyzerConfig> {
+    let config: Partial<AnalyzerConfig> = {}
+
+    if (configPath && fs.existsSync(configPath)) {
+        config = FileUtils.readJsonFile(configPath) || {}
+    } else if (fs.existsSync("api-analyzer.config.json")) {
+        config = FileUtils.readJsonFile("api-analyzer.config.json") || {}
+    }
+
+    return {
+        apiDir: "src/app/api",
+        outputDir: "./api-analysis",
+        includePatterns: ["**/*.ts", "**/*.js", "**/*.tsx"],
+        excludePatterns: ["**/node_modules/**", "**/*.test.*", "**/*.spec.*"],
+        authPatterns: [
+            "authorization",
+            "authenticate",
+            "jwt",
+            "token",
+            "session",
+            "auth",
+            "bearer",
+            "passport",
+            "next-auth",
+            "getServerSession",
+            "getToken",
+        ],
+        middlewarePatterns: [
+            "cors",
+            "helmet",
+            "rateLimit",
+            "bodyParser",
+            "multer",
+            "expressValidator",
+            "morgan",
+            "compression",
+            "cookieParser",
+            "csrf",
+            "expressSession",
+            "passport",
+            "nextConnect",
+        ],
+        enableTrends: true,
+        enablePerformanceAnalysis: true,
+        enableSecurityAnalysis: true,
+        thresholds: {
+            security: 80,
+            performance: 70,
+            maintainability: 75,
+            testCoverage: 80,
+        },
+        plugins: [],
+        customRules: [],
+        ...config,
+        ...overrides,
+    }
+}
+
+async function generateReport(
+    analyzer: NextApiAnalyzer,
+    analysis: any,
+    format: string,
+    outputDir: string,
+): Promise<void> {
+    FileUtils.ensureDirectoryExists(outputDir)
+
+    switch (format) {
+        case "md":
+            const mdReport = analyzer.generateReport(analysis)
+            fs.writeFileSync(path.join(outputDir, "analysis-report.md"), mdReport)
+            break
+
+        case "json":
+            FileUtils.writeJsonFile(path.join(outputDir, "analysis-data.json"), analysis)
+            break
+
+        case "html":
+            const htmlReport = generateHtmlReport(analysis)
+            fs.writeFileSync(path.join(outputDir, "analysis-report.html"), htmlReport)
+            break
+    }
+}
+
+function displaySummary(analysis: any): void {
+    logger.separator()
+    logger.info(chalk.bold("📊 Analysis Summary"))
+    logger.separator()
+
+    console.log(chalk.cyan("Routes:"), analysis.summary.totalRoutes)
+    console.log(chalk.green("Security Score:"), `${analysis.summary.securityScore.toFixed(1)}%`)
+    console.log(chalk.blue("Performance Score:"), `${analysis.summary.performanceScore.toFixed(1)}%`)
+    console.log(chalk.magenta("Maintainability Score:"), `${analysis.summary.maintainabilityScore.toFixed(1)}%`)
+
+    if (analysis.recommendations.length > 0) {
+        console.log(chalk.yellow("Recommendations:"), analysis.recommendations.length)
+
+        const criticalRecs = analysis.recommendations.filter((r: any) => r.severity === "CRITICAL").length
+        const highRecs = analysis.recommendations.filter((r: any) => r.severity === "HIGH").length
+
+        if (criticalRecs > 0) {
+            console.log(chalk.red(`  Critical: ${criticalRecs}`))
+        }
+        if (highRecs > 0) {
+            console.log(chalk.yellow(`  High: ${highRecs}`))
+        }
+    }
+
+    logger.separator()
+}
+
+function displaySecurityReport(analysis: any): void {
+    logger.separator()
+    logger.info(chalk.bold("🔐 Security Report"))
+    logger.separator()
+
+    console.log(chalk.green("Security Score:"), `${analysis.summary.securityScore.toFixed(1)}%`)
+    console.log(chalk.cyan("Secure Routes:"), `${analysis.summary.secureRoutes}/${analysis.summary.totalRoutes}`)
+
+    console.log(chalk.bold("\nRisk Distribution:"))
+    Object.entries(analysis.summary.riskDistribution).forEach(([risk, count]: [string, any]) => {
+        const color =
+            risk === "CRITICAL" ? chalk.red : risk === "HIGH" ? chalk.yellow : risk === "MEDIUM" ? chalk.blue : chalk.green
+        console.log(color(`  ${risk}: ${count}`))
+    })
+
+    const securityRecs = analysis.recommendations.filter((r: any) => r.type === "SECURITY")
+    if (securityRecs.length > 0) {
+        console.log(chalk.bold("\nTop Security Issues:"))
+        securityRecs.slice(0, 3).forEach((rec: any, index: number) => {
+            const severityColor =
+                rec.severity === "CRITICAL" ? chalk.red : rec.severity === "HIGH" ? chalk.yellow : chalk.blue
+            console.log(`  ${index + 1}. ${severityColor(rec.title)}`)
+            if (rec.route) {
+                console.log(`     Route: ${rec.route}`)
+            }
+        })
+    }
+
+    logger.separator()
+}
+
+function displayPerformanceReport(analysis: any): void {
+    logger.separator()
+    logger.info(chalk.bold("⚡ Performance Report"))
+    logger.separator()
+
+    console.log(chalk.blue("Performance Score:"), `${analysis.summary.performanceScore.toFixed(1)}%`)
+
+    const avgComplexity = analysis.routes.reduce((sum: number, route: any) => sum + (route.complexity || 0), 0) / analysis.routes.length
+    console.log(chalk.cyan("Average Complexity:"), avgComplexity.toFixed(1))
+
+    const highComplexityRoutes = analysis.routes.filter((r: any) => (r.complexity || 0) > 15)
+    if (highComplexityRoutes.length > 0) {
+        console.log(chalk.yellow("High Complexity Routes:"), highComplexityRoutes.length)
+        highComplexityRoutes.slice(0, 3).forEach((route: any) => {
+            console.log(`  ${route.path} (complexity: ${route.complexity})`)
+        })
+    }
+
+    logger.separator()
+}
+
+function displayTrendsReport(trends: any[], days: number): void {
+    logger.separator()
+    logger.info(chalk.bold("📈 Trends Report"))
+    logger.separator()
+
+    const recentTrends = trends.slice(-days)
+
+    if (recentTrends.length < 2) {
+        logger.warning("Not enough data for trend analysis")
+        return
+    }
+
+    const first = recentTrends[0]
+    const last = recentTrends[recentTrends.length - 1]
+
+    const routeChange = last.totalRoutes - first.totalRoutes
+    const securityChange = last.securityScore - first.securityScore
+    const performanceChange = last.performanceScore - first.performanceScore
+
+    console.log(
+        chalk.cyan("Route Count Change:"),
+        routeChange >= 0 ? chalk.green(`+${routeChange}`) : chalk.red(routeChange),
+    )
+    console.log(
+        chalk.cyan("Security Score Change:"),
+        securityChange >= 0 ? chalk.green(`+${securityChange.toFixed(1)}%`) : chalk.red(`${securityChange.toFixed(1)}%`),
+    )
+    console.log(
+        chalk.cyan("Performance Score Change:"),
+        performanceChange >= 0
+            ? chalk.green(`+${performanceChange.toFixed(1)}%`)
+            : chalk.red(`${performanceChange.toFixed(1)}%`),
+    )
+
+    logger.separator()
+}
+
+function displayComparisonReport(baseline: any, current: any): void {
+    logger.separator()
+    logger.info(chalk.bold("🔄 Comparison Report"))
+    logger.separator()
+
+    const routeChange = current.summary.totalRoutes - baseline.summary.totalRoutes
+    const securityChange = current.summary.securityScore - baseline.summary.securityScore
+    const performanceChange = current.summary.performanceScore - baseline.summary.performanceScore
+
+    console.log(
+        chalk.cyan("Routes:"),
+        `${baseline.summary.totalRoutes} → ${current.summary.totalRoutes}`,
+        routeChange >= 0 ? chalk.green(`(+${routeChange})`) : chalk.red(`(${routeChange})`),
+    )
+
+    console.log(
+        chalk.cyan("Security Score:"),
+        `${baseline.summary.securityScore.toFixed(1)}% → ${current.summary.securityScore.toFixed(1)}%`,
+        securityChange >= 0
+            ? chalk.green(`(+${securityChange.toFixed(1)}%)`)
+            : chalk.red(`(${securityChange.toFixed(1)}%)`),
+    )
+
+    console.log(
+        chalk.cyan("Performance Score:"),
+        `${baseline.summary.performanceScore.toFixed(1)}% → ${current.summary.performanceScore.toFixed(1)}%`,
+        performanceChange >= 0
+            ? chalk.green(`(+${performanceChange.toFixed(1)}%)`)
+            : chalk.red(`(${performanceChange.toFixed(1)}%)`),
+    )
+
+    logger.separator()
+}
+
+async function exportSarif(analysis: any, outputDir: string): Promise<void> {
+    const sarif = {
+        version: "2.1.0",
+        $schema: "https://json.schemastore.org/sarif-2.1.0.json",
+        runs: [
+            {
+                tool: {
+                    driver: {
+                        name: "next-api-analyzer",
+                        version: "2.0.0",
+                        informationUri: "https://github.com/your-repo/next-api-analyzer",
+                    },
+                },
+                results: analysis.recommendations
+                    .filter((rec: any) => rec.type === "SECURITY")
+                    .map((rec: any) => ({
+                        ruleId: rec.title.replace(/\s+/g, "_").toLowerCase(),
+                        level:
+                            rec.severity === "CRITICAL"
+                                ? "error"
+                                : rec.severity === "HIGH"
+                                    ? "error"
+                                    : rec.severity === "MEDIUM"
+                                        ? "warning"
+                                        : "note",
+                        message: {
+                            text: rec.description,
+                        },
+                        locations: rec.route
+                            ? [
+                                {
+                                    physicalLocation: {
+                                        artifactLocation: {
+                                            uri: rec.route,
+                                        },
+                                    },
+                                },
+                            ]
+                            : [],
+                    })),
+            },
+        ],
+    }
+
+    FileUtils.writeJsonFile(path.join(outputDir, "security-results.sarif"), sarif)
+    logger.success("SARIF report exported for CI/CD integration")
+}
+
+function generateHtmlReport(analysis: any): string {
     return `
         <!DOCTYPE html>
         <html lang="en">
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>API Routes Analysis Report</title>
+            <title>API Analysis Report</title>
+            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
             <style>
-                body {
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { 
                     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                    max-width: 1200px;
-                    margin: 0 auto;
-                    padding: 20px;
-                    background: #f5f5f5;
+                    background: #f8fafc;
+                    color: #334155;
+                    line-height: 1.6;
                 }
-                .container {
-                    background: white;
-                    padding: 30px;
-                    border-radius: 8px;
-                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                }
-                .header {
-                    border-bottom: 2px solid #e9ecef;
-                    padding-bottom: 20px;
-                    margin-bottom: 30px;
-                }
-                .summary {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                    gap: 20px;
-                    margin-bottom: 30px;
-                }
-                .stat-card {
+                .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+                .header { 
                     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                    padding: 20px;
-                    border-radius: 8px;
+                    color: white; 
+                    padding: 40px 20px; 
+                    border-radius: 12px; 
+                    margin-bottom: 30px;
                     text-align: center;
                 }
-                .stat-card.secure {
-                    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+                .header h1 { font-size: 2.5em; margin-bottom: 10px; }
+                .header p { opacity: 0.9; font-size: 1.1em; }
+                .metrics-grid { 
+                    display: grid; 
+                    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); 
+                    gap: 20px; 
+                    margin-bottom: 30px; 
                 }
-                .stat-card.public {
-                    background: linear-gradient(135deg, #fc4a1a 0%, #f7b733 100%);
+                .metric-card { 
+                    background: white; 
+                    padding: 25px; 
+                    border-radius: 12px; 
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+                    border-left: 4px solid #3b82f6;
                 }
-                .stat-value {
-                    font-size: 2em;
-                    font-weight: bold;
-                    margin-bottom: 5px;
+                .metric-value { 
+                    font-size: 2.5em; 
+                    font-weight: bold; 
+                    color: #1e40af; 
+                    margin-bottom: 5px; 
                 }
-                .stat-label {
-                    font-size: 0.9em;
-                    opacity: 0.9;
+                .metric-label { 
+                    color: #64748b; 
+                    font-size: 0.9em; 
+                    text-transform: uppercase; 
+                    letter-spacing: 0.5px; 
                 }
-                .route-card {
-                    border: 1px solid #e9ecef;
-                    border-radius: 8px;
-                    padding: 20px;
-                    margin-bottom: 20px;
-                    background: white;
+                .chart-container { 
+                    background: white; 
+                    padding: 25px; 
+                    border-radius: 12px; 
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+                    margin-bottom: 30px; 
                 }
-                .route-header {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    margin-bottom: 15px;
+                .recommendations { 
+                    background: white; 
+                    padding: 25px; 
+                    border-radius: 12px; 
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+                    margin-bottom: 30px; 
                 }
-                .route-path {
-                    font-size: 1.2em;
-                    font-weight: bold;
-                    color: #2c3e50;
+                .recommendation { 
+                    padding: 20px; 
+                    border-left: 4px solid #ef4444; 
+                    background: #fef2f2; 
+                    margin-bottom: 15px; 
+                    border-radius: 8px; 
                 }
-                .method-tag {
-                    background: #3498db;
-                    color: white;
-                    padding: 4px 8px;
-                    border-radius: 4px;
-                    font-size: 0.8em;
-                    margin-right: 5px;
+                .recommendation.medium { border-left-color: #f59e0b; background: #fffbeb; }
+                .recommendation.low { border-left-color: #10b981; background: #f0fdf4; }
+                .recommendation h3 { color: #1f2937; margin-bottom: 8px; }
+                .recommendation p { color: #6b7280; margin-bottom: 5px; }
+                .routes-table { 
+                    background: white; 
+                    border-radius: 12px; 
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+                    overflow: hidden; 
                 }
-                .method-tag.POST { background: #e74c3c; }
-                .method-tag.PUT { background: #f39c12; }
-                .method-tag.DELETE { background: #e74c3c; }
-                .method-tag.PATCH { background: #f39c12; }
-                .auth-status {
-                    padding: 4px 12px;
-                    border-radius: 20px;
-                    font-size: 0.85em;
-                    font-weight: bold;
+                .routes-table table { width: 100%; border-collapse: collapse; }
+                .routes-table th { 
+                    background: #f8fafc; 
+                    padding: 15px; 
+                    text-align: left; 
+                    font-weight: 600; 
+                    color: #374151; 
+                    border-bottom: 1px solid #e5e7eb; 
                 }
-                .auth-status.secured {
-                    background: #d4edda;
-                    color: #155724;
+                .routes-table td { 
+                    padding: 15px; 
+                    border-bottom: 1px solid #f3f4f6; 
                 }
-                .auth-status.public {
-                    background: #f8d7da;
-                    color: #721c24;
+                .routes-table tr:hover { background: #f9fafb; }
+                .risk-badge { 
+                    padding: 4px 12px; 
+                    border-radius: 20px; 
+                    font-size: 0.8em; 
+                    font-weight: 600; 
+                    text-transform: uppercase; 
                 }
-                .route-details {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-                    gap: 15px;
-                    margin-top: 15px;
+                .risk-critical { background: #fee2e2; color: #dc2626; }
+                .risk-high { background: #fef3c7; color: #d97706; }
+                .risk-medium { background: #dbeafe; color: #2563eb; }
+                .risk-low { background: #dcfce7; color: #16a34a; }
+                .auth-badge { 
+                    padding: 4px 8px; 
+                    border-radius: 4px; 
+                    font-size: 0.8em; 
+                    font-weight: 500; 
                 }
-                .detail-group {
-                    background: #f8f9fa;
-                    padding: 15px;
-                    border-radius: 6px;
-                }
-                .detail-title {
-                    font-weight: bold;
-                    margin-bottom: 8px;
-                    color: #495057;
-                }
-                .detail-list {
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 5px;
-                }
-                .detail-item {
-                    background: white;
-                    padding: 3px 8px;
-                    border-radius: 4px;
-                    font-size: 0.85em;
-                    border: 1px solid #dee2e6;
-                }
-                .methods-breakdown {
-                    display: flex;
-                    justify-content: center;
-                    gap: 20px;
-                    margin: 20px 0;
-                    flex-wrap: wrap;
-                }
-                .method-stat {
-                    text-align: center;
-                    padding: 10px;
-                    background: #f8f9fa;
-                    border-radius: 6px;
-                    min-width: 80px;
-                }
-                .security-overview {
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                    padding: 20px;
-                    border-radius: 8px;
-                    margin-bottom: 30px;
-                }
-                .progress-bar {
-                    background: rgba(255,255,255,0.3);
-                    border-radius: 10px;
-                    height: 20px;
-                    margin-top: 10px;
-                    overflow: hidden;
-                }
-                .progress-fill {
-                    height: 100%;
-                    background: rgba(255,255,255,0.8);
-                    transition: width 0.3s ease;
-                }
+                .auth-secured { background: #dcfce7; color: #16a34a; }
+                .auth-public { background: #fee2e2; color: #dc2626; }
             </style>
         </head>
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>🔍 API Routes Analysis Report</h1>
-                    <p>Generated on ${new Date().toLocaleString()}</p>
+                    <h1>🔍 API Analysis Report</h1>
+                    <p>Generated on ${analysis.metadata.analyzedAt}</p>
+                    <p>Analysis completed in ${analysis.metadata.duration}ms</p>
                 </div>
 
-                <div class="security-overview">
-                    <h2>🛡️ Security Overview</h2>
-                    <p>Security Coverage: ${((analysis.summary.secureRoutes / analysis.summary.totalRoutes) * 100).toFixed(1)}%</p>
-                    <div class="progress-bar">
-                        <div class="progress-fill" style="width: ${((analysis.summary.secureRoutes / analysis.summary.totalRoutes) * 100).toFixed(1)}%"></div>
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-value">${analysis.summary.totalRoutes}</div>
+                        <div class="metric-label">Total Routes</div>
                     </div>
-                </div>
-
-                <div class="summary">
-                    <div class="stat-card">
-                        <div class="stat-value">${analysis.summary.totalRoutes}</div>
-                        <div class="stat-label">Total Routes</div>
+                    <div class="metric-card">
+                        <div class="metric-value">${analysis.summary.securityScore.toFixed(1)}%</div>
+                        <div class="metric-label">Security Score</div>
                     </div>
-                    <div class="stat-card secure">
-                        <div class="stat-value">${analysis.summary.secureRoutes}</div>
-                        <div class="stat-label">Secure Routes</div>
+                    <div class="metric-card">
+                        <div class="metric-value">${analysis.summary.performanceScore.toFixed(1)}%</div>
+                        <div class="metric-label">Performance Score</div>
                     </div>
-                    <div class="stat-card public">
-                        <div class="stat-value">${analysis.summary.publicRoutes}</div>
-                        <div class="stat-label">Public Routes</div>
+                    <div class="metric-card">
+                        <div class="metric-value">${analysis.summary.maintainabilityScore.toFixed(1)}%</div>
+                        <div class="metric-label">Maintainability Score</div>
                     </div>
                 </div>
 
-                <div class="methods-breakdown">
-                    <h3>HTTP Methods Distribution</h3>
-                    <div style="display: flex; gap: 15px; flex-wrap: wrap; justify-content: center;">
-                        ${Object.entries(analysis.summary.methodsBreakdown)
+                <div class="chart-container">
+                    <h2>Risk Distribution</h2>
+                    <canvas id="riskChart" width="400" height="200"></canvas>
+                </div>
+
+                <div class="recommendations">
+                    <h2>🎯 Top Recommendations</h2>
+                    ${analysis.recommendations
+            .slice(0, 5)
             .map(
-                ([method, count]) => `
-                            <div class="method-stat">
-                                <div class="stat-value">${count}</div>
-                                <div class="stat-label">${method}</div>
-                            </div>
-                        `,
+                (rec: any) => `
+                        <div class="recommendation ${rec.severity.toLowerCase()}">
+                            <h3>${rec.title}</h3>
+                            <p><strong>Type:</strong> ${rec.type} | <strong>Severity:</strong> ${rec.severity} | <strong>Effort:</strong> ${rec.effort}</p>
+                            <p><strong>Description:</strong> ${rec.description}</p>
+                            <p><strong>Solution:</strong> ${rec.solution}</p>
+                            ${rec.route ? `<p><strong>Route:</strong> <code>${rec.route}</code></p>` : ""}
+                        </div>
+                    `,
             )
             .join("")}
-                    </div>
                 </div>
 
-                <h2>📋 Route Details</h2>
-                ${analysis.routes
+                <div class="routes-table">
+                    <h2 style="padding: 20px 20px 0;">📋 Route Details</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Route</th>
+                                <th>Methods</th>
+                                <th>Auth</th>
+                                <th>Risk</th>
+                                <th>Complexity</th>
+                                <th>Performance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${analysis.routes
             .map(
                 (route: any) => `
-                    <div class="route-card">
-                        <div class="route-header">
-                            <div class="route-path">${route.path}</div>
-                            <div class="auth-status ${route.hasAuth ? "secured" : "public"}">
-                                ${route.hasAuth ? "🔒 Secured" : "🔓 Public"}
-                            </div>
-                        </div>
-                        
-                        <div style="margin-bottom: 15px;">
-                            ${route.methods
-                        .map(
-                            (method: string) => `
-                                <span class="method-tag ${method}">${method}</span>
+                                <tr>
+                                    <td><code>${route.path}</code></td>
+                                    <td>${route.methods.join(", ")}</td>
+                                    <td><span class="auth-badge ${route.hasAuth ? "auth-secured" : "auth-public"}">${route.hasAuth ? "🔒 Secured" : "🔓 Public"}</span></td>
+                                    <td><span class="risk-badge risk-${route.riskLevel.toLowerCase()}">${route.riskLevel}</span></td>
+                                    <td>${route.complexity || "N/A"}</td>
+                                    <td>${route.performanceScore?.toFixed(1) || "N/A"}%</td>
+                                </tr>
                             `,
-                        )
-                        .join("")}
-                        </div>
-
-                        <div class="route-details">
-                            ${route.authTypes.length > 0
-                        ? `
-                                <div class="detail-group">
-                                    <div class="detail-title">🔐 Authentication</div>
-                                    <div class="detail-list">
-                                        ${route.authTypes
-                            .map(
-                                (type: string) => `
-                                            <span class="detail-item">${type}</span>
-                                        `,
-                            )
-                            .join("")}
-                                    </div>
-                                </div>
-                            `
-                        : ""
-                    }
-                            
-                            ${route.queryParams.length > 0
-                        ? `
-                                <div class="detail-group">
-                                    <div class="detail-title">🔍 Query Parameters</div>
-                                    <div class="detail-list">
-                                        ${route.queryParams
-                            .map(
-                                (param: string) => `
-                                            <span class="detail-item">${param}</span>
-                                        `,
-                            )
-                            .join("")}
-                                    </div>
-                                </div>
-                            `
-                        : ""
-                    }
-                            
-                            <div class="detail-group">
-                                <div class="detail-title">📊 Response Status Codes</div>
-                                <div class="detail-list">
-                                    ${route.responseStatuses
-                        .map(
-                            (status: number) => `
-                                        <span class="detail-item ${status >= 400 ? "error" : "success"}">${status}</span>
-                                    `,
-                        )
-                        .join("")}
-                                </div>
-                            </div>
-                            
-                            ${route.middlewares.length > 0
-                        ? `
-                                <div class="detail-group">
-                                    <div class="detail-title">🔧 Middlewares</div>
-                                    <div class="detail-list">
-                                        ${route.middlewares
-                            .map(
-                                (middleware: string) => `
-                                            <span class="detail-item">${middleware}</span>
-                                        `,
-                            )
-                            .join("")}
-                                    </div>
-                                </div>
-                            `
-                        : ""
-                    }
-                        </div>
-                        
-                        ${route.description
-                        ? `
-                            <div style="margin-top: 15px; padding: 10px; background: #e8f4f8; border-radius: 4px;">
-                                <strong>Description:</strong> ${route.description}
-                            </div>
-                        `
-                        : ""
-                    }
-                    </div>
-                `,
             )
             .join("")}
+                        </tbody>
+                    </table>
+                </div>
             </div>
+
+            <script>
+                // Risk Distribution Chart
+                const ctx = document.getElementById('riskChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(${JSON.stringify(analysis.summary.riskDistribution)}),
+                        datasets: [{
+                            data: Object.values(${JSON.stringify(analysis.summary.riskDistribution)}),
+                            backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444']
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        }
+                    }
+                });
+            </script>
         </body>
         </html>
-  `.trim()
+    `.trim()
 }
-
-program
-    .command("stats")
-    .description("Show quick statistics about API routes")
-    .option("-d, --dir <directory>", "API directory to analyze", "src/app/api")
-    .action(async (options) => {
-        try {
-            const analyzer = new NextApiAnalyzer(options.dir)
-            const analysis = await analyzer.analyzeRoutes()
-
-            console.log("\n📊 API Routes Statistics\n")
-            console.log(`📁 Directory: ${options.dir}`)
-            console.log(`📋 Total Routes: ${analysis.summary.totalRoutes}`)
-            console.log(`🔒 Secure Routes: ${analysis.summary.secureRoutes}`)
-            console.log(`🔓 Public Routes: ${analysis.summary.publicRoutes}`)
-            console.log(
-                `🛡️  Security Coverage: ${((analysis.summary.secureRoutes / analysis.summary.totalRoutes) * 100).toFixed(1)}%`,
-            )
-
-            console.log("\n📈 HTTP Methods:")
-            Object.entries(analysis.summary.methodsBreakdown).forEach(([method, count]) => {
-                console.log(`   ${method}: ${count}`)
-            })
-
-            const vulnerableRoutes = analysis.routes
-                .filter((route) => !route.hasAuth)
-                .filter((route) => route.methods.some((m) => ["POST", "PUT", "DELETE", "PATCH"].includes(m)))
-                .slice(0, 5)
-
-            if (vulnerableRoutes.length > 0) {
-                console.log("\n⚠️  High Risk Routes (Unprotected + Mutating):")
-                vulnerableRoutes.forEach((route) => {
-                    console.log(`   ${route.path} (${route.methods.join(", ")})`)
-                })
-            }
-        } catch (error) {
-            console.error("❌ Error generating stats:", error)
-            process.exit(1)
-        }
-    })
-
-program
-    .command("compare <file1> <file2>")
-    .description("Compare two analysis reports")
-    .action(async (file1, file2) => {
-        try {
-            const analysis1 = JSON.parse(fs.readFileSync(file1, "utf-8"))
-            const analysis2 = JSON.parse(fs.readFileSync(file2, "utf-8"))
-
-            console.log("\n📊 Analysis Comparison\n")
-
-            console.log("📋 Route Count Changes:")
-            console.log(`   Before: ${analysis1.summary.totalRoutes} routes`)
-            console.log(`   After: ${analysis2.summary.totalRoutes} routes`)
-            console.log(
-                `   Change: ${analysis2.summary.totalRoutes - analysis1.summary.totalRoutes > 0 ? "+" : ""}${analysis2.summary.totalRoutes - analysis1.summary.totalRoutes}`,
-            )
-
-            console.log("\n🔒 Security Changes:")
-            const secCoverage1 = (analysis1.summary.secureRoutes / analysis1.summary.totalRoutes) * 100
-            const secCoverage2 = (analysis2.summary.secureRoutes / analysis2.summary.totalRoutes) * 100
-            console.log(`   Before: ${secCoverage1.toFixed(1)}%`)
-            console.log(`   After: ${secCoverage2.toFixed(1)}%`)
-            console.log(
-                `   Change: ${secCoverage2 - secCoverage1 > 0 ? "+" : ""}${(secCoverage2 - secCoverage1).toFixed(1)}%`,
-            )
-
-            const routes1 = new Set(analysis1.routes.map((r: any) => r.path))
-            const routes2 = new Set(analysis2.routes.map((r: any) => r.path))
-            const newRoutes = analysis2.routes.filter((r: any) => !routes1.has(r.path))
-            const removedRoutes = analysis1.routes.filter((r: any) => !routes2.has(r.path))
-
-            if (newRoutes.length > 0) {
-                console.log("\n✅ New Routes:")
-                newRoutes.forEach((route: any) => {
-                    console.log(`   ${route.path} (${route.methods.join(", ")}) - ${route.hasAuth ? "🔒" : "🔓"}`)
-                })
-            }
-
-            if (removedRoutes.length > 0) {
-                console.log("\n❌ Removed Routes:")
-                removedRoutes.forEach((route: any) => {
-                    console.log(`   ${route.path} (${route.methods.join(", ")})`)
-                })
-            }
-        } catch (error) {
-            console.error("❌ Error comparing reports:", error)
-            process.exit(1)
-        }
-    })
 
 program.parse()
 
-export { program, generateHtmlReport }
+export { program }

@@ -7,9 +7,7 @@ A comprehensive library for analyzing, documenting, and monitoring Next.js API r
 - 🔍 **Automatic Route Discovery** - Scans your API directory and catalogs all routes
 - 🔒 **Security Analysis** - Identifies protected vs public routes and authentication methods
 - 📊 **Performance Tracking** - Runtime monitoring with response times and error rates
-- 📋 **Documentation Generation** - Auto-generates OpenAPI specs and HTML reports
 - 🎯 **CI/CD Integration** - Fails builds when security thresholds aren't met
-- 📈 **Real-time Monitoring** - Watch mode for continuous analysis
 - 🔄 **Comparison Reports** - Compare analysis between different versions
 
 ## Installation
@@ -55,17 +53,24 @@ npx next-api-analyzer security
 npx next-api-analyzer security --threshold 90 --fail-on-threshold
 ```
 
-### 3. Generate OpenAPI Documentation
+### 3. Performance Analysis
 
 ```bash
-# Generate OpenAPI spec
-npx next-api-analyzer openapi
+# Analyze performance of API routes
+npx next-api-analyzer performance --benchmark
 
-# Generate YAML format
-npx next-api-analyzer openapi --yaml --output api-spec.yaml
+# Generate performance report
+npx next-api-analyzer performance --output performance-report.md
 ```
 
-### 4. Programmatic Usage
+### 4. Generate All Reports
+
+```bash
+# Generate all reports in different formats
+npx next-api-analyzer analyze --format all --include-trends
+```
+
+### 5. Programmatic Usage
 
 ```typescript
 import { NextApiAnalyzer, withApiTracking } from 'next-api-analyzer';
@@ -95,6 +100,7 @@ Options:
   -d, --dir <directory>     API directory to analyze (default: "/src/app/api")
   -o, --output <file>       Output file for report (default: "api-analysis.md")
   -f, --format <format>     Output format: md, json, html (default: "md")
+  --include-trends          Include trend analysis in report
 ```
 
 ### `security`
@@ -105,45 +111,19 @@ Perform security audit on your API routes.
 npx next-api-analyzer security [options]
 
 Options:
-  -d, --dir <directory>     API directory to analyze (default: "/src/app/api")
   -t, --threshold <number>  Security coverage threshold 0-100 (default: "80")
   --fail-on-threshold       Exit with error if threshold not met
+  --export-sarif            Export SARIF format for CI/CD
 ```
 
-### `openapi`
-
-Generate OpenAPI specification from your API routes.
-
-```bash
-npx next-api-analyzer openapi [options]
-
-Options:
-  -d, --dir <directory>     API directory to analyze (default: "/arc/app/api")
-  -o, --output <file>       Output file for spec (default: "openapi.json")
-  --yaml                    Output in YAML format
-```
-
-### `stats`
-
-Show quick statistics about your API routes.
+### `performance`
+Analyze performance of your API routes.
 
 ```bash
-npx next-api-analyzer stats [options]
+npx next-api-analyzer performance [options]
 
 Options:
-  -d, --dir <directory>     API directory to analyze (default: "/src/app/api")
-```
-
-### `watch`
-
-Watch for changes and continuously analyze your API routes.
-
-```bash
-npx next-api-analyzer watch [options]
-
-Options:
-  -d, --dir <directory>     API directory to watch (default: "/src/app/api")
-  -i, --interval <seconds>  Check interval in seconds (default: "5")
+  --benchmark                Run performance benchmarks
 ```
 
 ### `compare`
@@ -165,44 +145,10 @@ Add these scripts to your `package.json`:
   "scripts": {
     "api:analyze": "next-api-analyzer analyze",
     "api:security": "next-api-analyzer security --fail-on-threshold",
-    "api:docs": "next-api-analyzer openapi --output docs/api-spec.json",
-    "api:stats": "next-api-analyzer stats",
-    "api:watch": "next-api-analyzer watch"
+    "api:performance": "next-api-analyzer performance",
+    "api:docs": "next-api-analyzer analyze --format html --output docs/api-report.html"
   }
 }
-```
-
-### CI/CD Integration
-
-#### GitHub Actions
-
-```yaml
-name: API Security Audit
-on: [push, pull_request]
-
-jobs:
-  audit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      - run: npm ci
-      - run: npm run api:security
-      - run: npm run api:docs
-      - uses: actions/upload-artifact@v3
-        with:
-          name: api-documentation
-          path: docs/
-```
-
-#### Pre-commit Hook
-
-```bash
-# .husky/pre-commit
-#!/bin/sh
-npm run api:security
 ```
 
 ## API Reference
@@ -293,24 +239,35 @@ The analyzer automatically detects:
 
 ## Output Formats
 
-### Markdown Report
+### Security Report
+🔐 Security Report
+─────────────────────────────────────────────────────
+Security Score: 75.5%
+Secure Routes: 8/12
 
-```markdown
-# API Routes Analysis Report
+Risk Distribution:
+  CRITICAL: 1
+  HIGH: 2
+  MEDIUM: 4
+  LOW: 5
 
-## Summary
-- Total Routes: 15
-- Secure Routes: 12
-- Public Routes: 3
-- Security Coverage: 80.0%
+Top Security Issues:
+  1. Missing Authentication (HIGH)
+     Route: /api/admin/users
+  2. Potential SQL Injection (CRITICAL)
+     Route: /api/search
 
-## Routes
-### /api/users/[id]
-- Methods: GET, PUT, DELETE
-- Authentication: ✅ Secured (JWT)
-- Query Parameters: id
-- Response Codes: 200, 404, 500
-```
+### Performance Report
+⚡ Performance Report
+─────────────────────────────────────────────────────
+Performance Score: 82.3%
+Average Complexity: 8.5
+
+High Complexity Routes: 3
+  /api/complex-calculation (complexity: 18)
+  /api/data-processing (complexity: 16)
+  /api/report-generator (complexity: 15)
+
 
 ### JSON Analysis
 
