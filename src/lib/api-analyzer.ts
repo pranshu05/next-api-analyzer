@@ -1,7 +1,7 @@
 import fs from "fs"
 import path from "path"
 import ts from "typescript"
-import type { ApiRouteInfo, ApiAnalysisResult, AnalyzerConfig, Recommendation, TrendData } from "../types"
+import type { ApiRouteInfo, ApiAnalysisResult, AnalyzerConfig, Recommendation, TrendData, HttpMethod, AuthType, RiskLevel } from "../types"
 import { DEFAULT_CONFIG } from "../config/default-config"
 import { FileUtils } from "../utils/file-utils"
 import { logger } from "../utils/logger"
@@ -49,7 +49,7 @@ export class NextApiAnalyzer {
     private async analyzeFile(filePath: string): Promise<void> {
         try {
             const content = fs.readFileSync(filePath, "utf-8")
-            const fileStats = FileUtils.getFileStats(filePath)
+            const fileStats = await FileUtils.getFileStats(filePath)
             const routeInfo = await this.parseRouteInfo(filePath, content, fileStats)
             this.routes.push(routeInfo)
         } catch (error) {
@@ -70,13 +70,25 @@ export class NextApiAnalyzer {
         const baseRoute: Partial<ApiRouteInfo> = {
             path: routePath,
             methods: isAppRouter
-                ? this.extractAppRouterMethods(content, sourceFile)
-                : this.extractMethods(content, sourceFile),
+                ? this.extractAppRouterMethods(content, sourceFile).map((method) => method as HttpMethod)
+                : this.extractMethods(content, sourceFile).map((method) => method as HttpMethod),
             hasAuth: this.detectAuth(content, sourceFile),
             authTypes: this.extractAuthTypes(content, sourceFile),
-            queryParams: this.extractQueryParams(content, sourceFile, isAppRouter),
-            pathParams: this.extractPathParams(routePath, content, sourceFile),
-            bodyParams: this.extractBodyParams(content, sourceFile, isAppRouter),
+            queryParams: this.extractQueryParams(content, sourceFile, isAppRouter).map((param) => ({
+                name: param,
+                type: "string",
+                required: true,
+            })),
+            pathParams: this.extractPathParams(routePath, content, sourceFile).map((param) => ({
+                name: param,
+                type: "string",
+                required: true,
+            })),
+            bodyParams: this.extractBodyParams(content, sourceFile, isAppRouter).map((param) => ({
+                name: param,
+                type: "string",
+                required: true,
+            })),
             headers: this.extractHeaders(content, sourceFile),
             responseStatuses: this.extractResponseStatuses(content, sourceFile, isAppRouter),
             middlewares: this.extractMiddlewares(content, sourceFile),
@@ -168,10 +180,11 @@ export class NextApiAnalyzer {
             summary,
             metadata: {
                 analyzedAt: new Date(),
-                version: "2.0.0",
+                version: "3.0.0",
                 duration,
                 totalFiles: this.routes.length,
                 totalLinesOfCode: this.routes.reduce((sum, route) => sum + (route.linesOfCode || 0), 0),
+                configHash: this.generateConfigHash(this.config),
             },
             recommendations,
         }
@@ -186,6 +199,7 @@ export class NextApiAnalyzer {
 
         if (unsecuredRoutes.length > 0) {
             recommendations.push({
+                id: `UNSECURED_MUTATING_ROUTES_${Date.now()}`,
                 type: "SECURITY",
                 severity: "HIGH",
                 title: "Unsecured Mutating Routes",
@@ -193,12 +207,15 @@ export class NextApiAnalyzer {
                 solution: "Add authentication middleware to these routes",
                 impact: "Unauthorized data modification",
                 effort: "MEDIUM",
+                category: "security",
+                tags: ["authentication", "security"],
             })
         }
 
         const highComplexityRoutes = this.routes.filter((r) => (r.complexity || 0) > 15)
         if (highComplexityRoutes.length > 0) {
             recommendations.push({
+                id: `HIGH_COMPLEXITY_ROUTES_${Date.now()}`,
                 type: "PERFORMANCE",
                 severity: "MEDIUM",
                 title: "High Complexity Routes",
@@ -206,12 +223,15 @@ export class NextApiAnalyzer {
                 solution: "Refactor complex routes into smaller functions",
                 impact: "Reduced maintainability and performance",
                 effort: "HIGH",
+                category: "complexity",
+                tags: ["performance", "complexity"],
             })
         }
 
         const largeFunctions = this.routes.filter((r) => (r.linesOfCode || 0) > 100)
         if (largeFunctions.length > 0) {
             recommendations.push({
+                id: `LARGE_ROUTE_FUNCTIONS_${Date.now()}`,
                 type: "MAINTAINABILITY",
                 severity: "MEDIUM",
                 title: "Large Route Functions",
@@ -219,14 +239,16 @@ export class NextApiAnalyzer {
                 solution: "Break down large functions into smaller, focused functions",
                 impact: "Reduced code maintainability",
                 effort: "MEDIUM",
+                category: "maintainability",
+                tags: ["maintainability", "size"],
             })
         }
 
         return recommendations
     }
 
-    private calculateRiskDistribution(): { [risk: string]: number } {
-        const distribution: { [risk: string]: number } = {
+    private calculateRiskDistribution(): Record<RiskLevel, number> {
+        const distribution: Record<RiskLevel, number> = {
             LOW: 0,
             MEDIUM: 0,
             HIGH: 0,
@@ -234,7 +256,7 @@ export class NextApiAnalyzer {
         }
 
         this.routes.forEach((route) => {
-            distribution[route.riskLevel]++
+            distribution[route.riskLevel as RiskLevel]++
         })
 
         return distribution
@@ -284,12 +306,22 @@ export class NextApiAnalyzer {
         return 75
     }
 
-    private calculateMethodsBreakdown(): { [method: string]: number } {
-        const breakdown: { [method: string]: number } = {}
+    private calculateMethodsBreakdown(): Record<HttpMethod, number> {
+        const breakdown: Record<HttpMethod, number> = {
+            GET: 0,
+            POST: 0,
+            PUT: 0,
+            DELETE: 0,
+            PATCH: 0,
+            HEAD: 0,
+            OPTIONS: 0,
+        }
 
         this.routes.forEach((route) => {
             route.methods.forEach((method) => {
-                breakdown[method] = (breakdown[method] || 0) + 1
+                if (method in breakdown) {
+                    breakdown[method as HttpMethod]++
+                }
             })
         })
 
@@ -318,8 +350,8 @@ export class NextApiAnalyzer {
     }
 
     private async saveTrendData(result: ApiAnalysisResult): Promise<void> {
-        const trendsFile = path.join(this.config.outputDir, "trends.json")
-        const existingTrends = FileUtils.readJsonFile<TrendData[]>(trendsFile) || []
+        const trendsFile = path.join(this.config.outputDir, "trends.json");
+        const existingTrends = await FileUtils.readJsonFile<TrendData[]>(trendsFile) || [];
 
         const newTrend: TrendData = {
             date: new Date(),
@@ -327,13 +359,25 @@ export class NextApiAnalyzer {
             securityScore: result.summary.securityScore,
             performanceScore: result.summary.performanceScore,
             maintainabilityScore: result.summary.maintainabilityScore,
+            configHash: this.generateConfigHash(this.config),
+        };
+
+        existingTrends.push(newTrend);
+
+        const recentTrends = existingTrends.slice(-30);
+
+        FileUtils.writeJsonFile(trendsFile, recentTrends);
+    }
+
+    private generateConfigHash(config: AnalyzerConfig): string {
+        const configString = JSON.stringify(config);
+        let hash = 0;
+        for (let i = 0; i < configString.length; i++) {
+            const char = configString.charCodeAt(i);
+            hash = (hash << 5) - hash + char;
+            hash |= 0;
         }
-
-        existingTrends.push(newTrend)
-
-        const recentTrends = existingTrends.slice(-30)
-
-        FileUtils.writeJsonFile(trendsFile, recentTrends)
+        return hash.toString(16);
     }
 
     private isAppRouterFile(filePath: string): boolean {
@@ -414,13 +458,13 @@ export class NextApiAnalyzer {
     }
 
     private detectAuth(content: string, sourceFile: ts.SourceFile): boolean {
-        return this.config.authPatterns.some((pattern) => new RegExp(pattern, "i").test(content))
+        return this.config.authPatterns.some((pattern) => new RegExp(String(pattern), "i").test(content))
     }
 
-    private extractAuthTypes(content: string, sourceFile: ts.SourceFile): string[] {
-        const authTypes = new Set<string>()
+    private extractAuthTypes(content: string, sourceFile: ts.SourceFile): AuthType[] {
+        const authTypes = new Set<AuthType>()
 
-        const authTypeMap = {
+        const authTypeMap: Record<string, AuthType> = {
             "next-auth": "NextAuth.js",
             jwt: "JWT",
             bearer: "Bearer Token",
@@ -434,7 +478,7 @@ export class NextApiAnalyzer {
         }
 
         Object.entries(authTypeMap).forEach(([pattern, type]) => {
-            if (new RegExp(pattern, "i").test(content)) {
+            if (new RegExp(pattern as unknown as string, "i").test(content)) {
                 authTypes.add(type)
             }
         })
@@ -547,8 +591,8 @@ export class NextApiAnalyzer {
         const middlewares = new Set<string>()
 
         this.config.middlewarePatterns.forEach((pattern) => {
-            if (new RegExp(pattern, "i").test(content)) {
-                middlewares.add(pattern)
+            if (new RegExp(pattern as unknown as string, "i").test(content)) {
+                middlewares.add(String(pattern))
             }
         })
 
