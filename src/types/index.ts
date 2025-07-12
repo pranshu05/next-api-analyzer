@@ -10,8 +10,6 @@ export interface ApiRouteInfo {
     responseStatuses: number[]
     middlewares: string[]
     description?: string
-    requestBodyType?: string
-    responseBodyType?: string
     riskLevel: RiskLevel
     hasRateLimit: boolean
     hasCors: boolean
@@ -21,13 +19,7 @@ export interface ApiRouteInfo {
     lastModified: Date
     fileSize: number
     linesOfCode: number
-    cyclomaticComplexity: number
-    testCoverage: number
     performanceScore: number
-    securityScore: number
-    maintainabilityScore: number
-    runtimeStats?: RuntimeStats
-    performanceMetrics?: PerformanceMetrics
 }
 
 export interface Parameter {
@@ -35,23 +27,6 @@ export interface Parameter {
     type: string
     required: boolean
     description?: string
-    example?: any
-}
-
-export interface RuntimeStats {
-    callCount: number
-    averageResponseTime: number
-    errorRate: number
-    lastCalled: Date
-    throughput: number
-    successRate: number
-}
-
-export interface PerformanceMetrics {
-    p95: number
-    p99: number
-    maxResponseTime: number
-    minResponseTime: number
 }
 
 export interface ApiAnalysisResult {
@@ -59,7 +34,6 @@ export interface ApiAnalysisResult {
     summary: AnalysisSummary
     metadata: AnalysisMetadata
     recommendations: Recommendation[]
-    trends?: TrendData[]
 }
 
 export interface AnalysisSummary {
@@ -68,18 +42,11 @@ export interface AnalysisSummary {
     publicRoutes: number
     methodsBreakdown: Record<HttpMethod, number>
     statusCodeDistribution: Record<string, number>
-    parameterStatistics: ParameterStatistics
     riskDistribution: Record<RiskLevel, number>
     securityScore: number
     performanceScore: number
     maintainabilityScore: number
     testCoverageScore: number
-}
-
-export interface ParameterStatistics {
-    queryParams: number
-    pathParams: number
-    bodyParams: number
 }
 
 export interface AnalysisMetadata {
@@ -88,7 +55,6 @@ export interface AnalysisMetadata {
     duration: number
     totalFiles: number
     totalLinesOfCode: number
-    configHash: string
 }
 
 export interface Recommendation {
@@ -107,15 +73,6 @@ export interface Recommendation {
     fixExample?: string
 }
 
-export interface TrendData {
-    date: Date
-    totalRoutes: number
-    securityScore: number
-    performanceScore: number
-    maintainabilityScore: number
-    configHash: string
-}
-
 export interface AnalyzerConfig {
     apiDir: string
     outputDir: string
@@ -126,10 +83,7 @@ export interface AnalyzerConfig {
     enableTrends: boolean
     enablePerformanceAnalysis: boolean
     enableSecurityAnalysis: boolean
-    enableOpenApiGeneration: boolean
     thresholds: QualityThresholds
-    plugins: PluginConfig[]
-    customRules: CustomRule[]
     cache: CacheConfig
     parallel: boolean
     maxConcurrency: number
@@ -156,23 +110,6 @@ export interface QualityThresholds {
     complexity: number
 }
 
-export interface PluginConfig {
-    name: string
-    enabled: boolean
-    options: Record<string, any>
-}
-
-export interface CustomRule {
-    id: string
-    name: string
-    pattern: RegExp
-    type: RecommendationType
-    severity: Severity
-    message: string
-    solution: string
-    category: string
-}
-
 export interface CacheConfig {
     enabled: boolean
     ttl: number
@@ -191,8 +128,18 @@ export interface AnalysisError {
     file: string
     error: string
     severity: "warning" | "error"
-    line?: number
-    column?: number
+}
+
+export interface AnalyzerPlugin {
+    name: string
+    version: string
+    analyze(route: ApiRouteInfo, content: string, context: AnalysisContext): Promise<PluginResult>
+}
+
+export interface PluginResult {
+    recommendations: Recommendation[]
+    metrics: Record<string, number>
+    metadata: Record<string, any>
 }
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS"
@@ -211,15 +158,3 @@ export type AuthType =
     | "Supabase Auth"
     | "Auth0"
     | "Passport"
-    
-export interface AnalyzerPlugin {
-    name: string
-    version: string
-    analyze(route: ApiRouteInfo, content: string, context: AnalysisContext): Promise<PluginResult>
-}
-
-export interface PluginResult {
-    recommendations: Recommendation[]
-    metrics: Record<string, number>
-    metadata: Record<string, any>
-}

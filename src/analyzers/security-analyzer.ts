@@ -1,6 +1,7 @@
-import type { ApiRouteInfo, Recommendation, RiskLevel, AuthPattern } from "../types"
-import type ts from "typescript"
+import type { ApiRouteInfo, Recommendation, RiskLevel } from "../types"
 import { logger } from "../utils/logger"
+import { BaseAnalyzer } from "./base-analyzer"
+import { SECURITY_PATTERNS, calculateRiskLevel } from "../utils/common"
 
 interface SecurityVulnerability {
     name: string
@@ -11,7 +12,7 @@ interface SecurityVulnerability {
     cwe?: string
 }
 
-export class SecurityAnalyzer {
+export class SecurityAnalyzer extends BaseAnalyzer {
     private static readonly VULNERABILITIES: SecurityVulnerability[] = [
         {
             name: "SQL_INJECTION",
@@ -105,8 +106,6 @@ export class SecurityAnalyzer {
     static analyzeRoute(
         route: ApiRouteInfo,
         content: string,
-        sourceFile: ts.SourceFile,
-        authPatterns: AuthPattern[] = [],
     ): {
         riskLevel: RiskLevel
         recommendations: Recommendation[]
@@ -125,21 +124,14 @@ export class SecurityAnalyzer {
                         "MISSING_AUTHENTICATION",
                         "SECURITY",
                         "HIGH",
-                        "Missing Authentication on Sensitive Route",
+                        "Missing Authentication",
                         `Route ${route.path} allows ${route.methods.join(", ")} operations without authentication`,
                         route.path,
-                        "Add authentication middleware or checks before processing requests",
-                        "Unauthorized access to sensitive operations, potential data breach",
+                        "Add authentication middleware",
+                        "Unauthorized access to sensitive operations",
                         "MEDIUM",
-                        ["authentication", "security"],
-                        `// Add authentication check
-                        if (!req.headers.authorization) {
-                            return res.status(401).json({ error: 'Unauthorized' });
-                        }`,
-                        `const token = req.headers.authorization?.replace('Bearer ', '');
-                        if (!token || !verifyToken(token)) {
-                            return res.status(401).json({ error: 'Unauthorized' });
-                        }`,
+                        "authentication",
+                        ["security", "auth"],
                     ),
                 )
             }
@@ -161,9 +153,8 @@ export class SecurityAnalyzer {
                                 this.getVulnerabilitySolution(vulnerability.name),
                                 this.getVulnerabilityImpact(vulnerability.name),
                                 "MEDIUM",
-                                [vulnerability.category, "security"],
-                                undefined,
-                                this.getVulnerabilityFix(vulnerability.name),
+                                vulnerability.category,
+                                ["security", vulnerability.category],
                             ),
                         )
                         break
@@ -171,9 +162,31 @@ export class SecurityAnalyzer {
                 }
             }
 
-            this.checkSecurityControls(route, content, sourceFile, recommendations)
+            Object.entries(SECURITY_PATTERNS).forEach(([vulnName, patterns]) => {
+                if (patterns.some((pattern) => pattern.test(content))) {
+                    const severity = vulnName === "SQL_INJECTION" ? "CRITICAL" : "HIGH"
+                    const score = severity === "CRITICAL" ? 40 : 25
+                    riskScore += score
 
-            const riskLevel = this.calculateRiskLevel(riskScore)
+                    recommendations.push(
+                        this.createRecommendation(
+                            vulnName,
+                            "SECURITY",
+                            severity,
+                            `Potential ${vulnName.replace("_", " ")}`,
+                            `Detected pattern that may indicate ${vulnName.toLowerCase().replace("_", " ")} vulnerability`,
+                            route.path,
+                            this.getVulnerabilitySolution(vulnName),
+                            this.getVulnerabilityImpact(vulnName),
+                            "MEDIUM",
+                            "security",
+                            ["security", vulnName.toLowerCase()],
+                        ),
+                    )
+                }
+            })
+
+            const riskLevel = calculateRiskLevel(riskScore)
             const securityScore = Math.max(0, 100 - riskScore)
 
             logger.debug(`Security analysis for ${route.path}: score=${securityScore}, risk=${riskLevel}`)
@@ -192,14 +205,7 @@ export class SecurityAnalyzer {
 
     private static isSensitiveRoute(route: ApiRouteInfo): boolean {
         const sensitiveMethods = ["POST", "PUT", "DELETE", "PATCH"]
-        const sensitivePathPatterns = [
-            /\/admin\//i,
-            /\/user[s]?\//i,
-            /\/auth\//i,
-            /\/payment[s]?\//i,
-            /\/order[s]?\//i,
-            /\/upload/i,
-        ]
+        const sensitivePathPatterns = [/\/admin\//i, /\/user[s]?\//i, /\/auth\//i, /\/config\//i, /\/settings\//i, /\/payment[s]\//i, /\/checkout\//i, /\/order[s]?\//i]
 
         return (
             route.methods.some((method) => sensitiveMethods.includes(method)) ||
@@ -207,170 +213,21 @@ export class SecurityAnalyzer {
         )
     }
 
-    private static checkSecurityControls(
-        route: ApiRouteInfo,
-        content: string,
-        sourceFile: ts.SourceFile,
-        recommendations: Recommendation[],
-    ): void {
-        if (!this.hasInputValidation(content)) {
-            recommendations.push(
-                this.createRecommendation(
-                    "MISSING_INPUT_VALIDATION",
-                    "SECURITY",
-                    "MEDIUM",
-                    "Missing Input Validation",
-                    "Route does not appear to validate input parameters",
-                    route.path,
-                    "Add input validation using libraries like Joi, Yup, or Zod",
-                    "Invalid data processing, potential security vulnerabilities",
-                    "LOW",
-                    ["validation", "security"],
-                ),
-            )
-        }
-
-        if (!route.hasRateLimit && this.isSensitiveRoute(route)) {
-            recommendations.push(
-                this.createRecommendation(
-                    "MISSING_RATE_LIMITING",
-                    "SECURITY",
-                    "MEDIUM",
-                    "Missing Rate Limiting",
-                    "Sensitive endpoints should have rate limiting to prevent abuse",
-                    route.path,
-                    "Implement rate limiting middleware (e.g., express-rate-limit)",
-                    "Potential abuse, DoS attacks, and resource exhaustion",
-                    "LOW",
-                    ["rate-limiting", "security"],
-                ),
-            )
-        }
-
-        if (!this.hasHttpsEnforcement(content)) {
-            recommendations.push(
-                this.createRecommendation(
-                    "MISSING_HTTPS_ENFORCEMENT",
-                    "SECURITY",
-                    "MEDIUM",
-                    "Missing HTTPS Enforcement",
-                    "Route should enforce HTTPS for secure communication",
-                    route.path,
-                    "Add HTTPS enforcement middleware or check request protocol",
-                    "Data transmission in plain text, potential man-in-the-middle attacks",
-                    "LOW",
-                    ["https", "security"],
-                ),
-            )
-        }
-    }
-
-    private static hasInputValidation(content: string): boolean {
-        const validationPatterns = [
-            /joi\./i,
-            /yup\./i,
-            /zod\./i,
-            /validate\(/i,
-            /schema\./i,
-            /\.parse\(/,
-            /\.safeParse\(/,
-            /express-validator/i,
-            /class-validator/i,
-            /ajv/i,
-        ]
-
-        return validationPatterns.some((pattern) => pattern.test(content))
-    }
-
-    private static hasHttpsEnforcement(content: string): boolean {
-        const httpsPatterns = [
-            /req\.secure/,
-            /req\.protocol.*https/,
-            /x-forwarded-proto.*https/i,
-            /helmet/i,
-            /express-enforces-ssl/i,
-        ]
-
-        return httpsPatterns.some((pattern) => pattern.test(content))
-    }
-
-    private static createRecommendation(
-        id: string,
-        type: "SECURITY",
-        severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
-        title: string,
-        description: string,
-        route: string,
-        solution: string,
-        impact: string,
-        effort: "LOW" | "MEDIUM" | "HIGH",
-        tags: string[],
-        codeExample?: string,
-        fixExample?: string,
-    ): Recommendation {
-        return {
-            id: `${id}_${route.replace(/[^a-zA-Z0-9]/g, "_")}`,
-            type,
-            severity,
-            title,
-            description,
-            route,
-            solution,
-            impact,
-            effort,
-            category: "security",
-            tags,
-            codeExample,
-            fixExample,
-        }
-    }
-
     private static getVulnerabilitySolution(vulnerability: string): string {
         const solutions: Record<string, string> = {
-            SQL_INJECTION: "Use parameterized queries, prepared statements, or ORM with proper escaping",
-            XSS: "Sanitize user input, use Content Security Policy, and safe rendering methods",
-            HARDCODED_SECRETS: "Move secrets to environment variables or secure secret management systems",
-            WEAK_CRYPTO: "Use strong cryptographic functions like bcrypt, scrypt, or crypto.randomBytes",
-            CORS_MISCONFIGURATION: "Configure CORS with specific origins instead of wildcard (*)",
-            PATH_TRAVERSAL: "Validate and sanitize file paths, use path.resolve() and check boundaries",
-            COMMAND_INJECTION: "Avoid executing user input, use safe alternatives or proper sanitization",
+            SQL_INJECTION: "Use parameterized queries or ORM with proper escaping",
+            XSS: "Sanitize user input and use Content Security Policy",
+            HARDCODED_SECRETS: "Move secrets to environment variables",
         }
         return solutions[vulnerability] || "Review and fix the security issue"
     }
 
     private static getVulnerabilityImpact(vulnerability: string): string {
         const impacts: Record<string, string> = {
-            SQL_INJECTION: "Database compromise, data theft, unauthorized data modification",
-            XSS: "Client-side code execution, session hijacking, data theft",
-            HARDCODED_SECRETS: "Credential exposure, unauthorized access to systems",
-            WEAK_CRYPTO: "Cryptographic attacks, data compromise, password cracking",
-            CORS_MISCONFIGURATION: "Cross-origin attacks, data leakage, unauthorized access",
-            PATH_TRAVERSAL: "Unauthorized file access, information disclosure, system compromise",
-            COMMAND_INJECTION: "Remote code execution, system compromise, data theft",
+            SQL_INJECTION: "Database compromise and data theft",
+            XSS: "Client-side code execution and session hijacking",
+            HARDCODED_SECRETS: "Credential exposure and unauthorized access",
         }
         return impacts[vulnerability] || "Security vulnerability"
-    }
-
-    private static getVulnerabilityFix(vulnerability: string): string {
-        const fixes: Record<string, string> = {
-            SQL_INJECTION: `// Use parameterized queries
-                const result = await db.query('SELECT * FROM users WHERE id = $1', [userId]);`,
-            XSS: `// Sanitize input and use safe rendering
-                const sanitizedInput = DOMPurify.sanitize(userInput);`,
-            HARDCODED_SECRETS: `// Use environment variables
-                const apiKey = process.env.API_KEY;`,
-            WEAK_CRYPTO: `// Use strong crypto
-                const hash = await bcrypt.hash(password, 12);`,
-            CORS_MISCONFIGURATION: `// Configure CORS properly
-                app.use(cors({ origin: ['https://yourdomain.com'] }));`,
-        }
-        return fixes[vulnerability] || ""
-    }
-
-    private static calculateRiskLevel(score: number): RiskLevel {
-        if (score >= 50) return "CRITICAL"
-        if (score >= 30) return "HIGH"
-        if (score >= 15) return "MEDIUM"
-        return "LOW"
     }
 }

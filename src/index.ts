@@ -7,37 +7,6 @@ export { PluginManager, OpenApiPlugin, TestCoveragePlugin }
 import { CacheManager } from "./lib/cache-manager"
 export { CacheManager }
 
-import {
-    runBasicAnalysis,
-    runCustomAnalysis,
-    runFilteredAnalysis,
-    generateAdvancedSecurityReport,
-    generateAdvancedPerformanceReport,
-    advancedCicdIntegration,
-    runPluginBasedAnalysis,
-    runCachedAnalysis,
-    runEnterpriseAnalysis,
-    CustomSecurityPlugin,
-    PerformanceMonitoringPlugin,
-    trackedPagesHandler,
-    GET,
-} from "./examples/usage"
-export {
-    runBasicAnalysis,
-    runCustomAnalysis,
-    runFilteredAnalysis,
-    generateAdvancedSecurityReport,
-    generateAdvancedPerformanceReport,
-    advancedCicdIntegration,
-    runPluginBasedAnalysis,
-    runCachedAnalysis,
-    runEnterpriseAnalysis,
-    CustomSecurityPlugin,
-    PerformanceMonitoringPlugin,
-    trackedPagesHandler,
-    GET,
-}
-
 import type { AnalyzerConfig, ApiAnalysisResult } from "./types"
 export * from "./types"
 
@@ -55,13 +24,12 @@ export { securityAnalyzer, performanceAnalyzer }
 import { program } from "./bin/api-analyzer"
 export { program }
 
-export const VERSION = "3.0.0"
+export const VERSION = "3.1.0"
 
 export const ENTERPRISE_CONFIG: Partial<AnalyzerConfig> = {
     enableTrends: true,
     enablePerformanceAnalysis: true,
     enableSecurityAnalysis: true,
-    enableOpenApiGeneration: true,
     parallel: true,
     maxConcurrency: 8,
     thresholds: {
