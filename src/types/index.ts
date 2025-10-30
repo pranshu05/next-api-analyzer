@@ -80,13 +80,9 @@ export interface AnalyzerConfig {
     excludePatterns: string[]
     authPatterns: AuthPattern[]
     middlewarePatterns: MiddlewarePattern[]
-    enableTrends: boolean
     enablePerformanceAnalysis: boolean
     enableSecurityAnalysis: boolean
     thresholds: QualityThresholds
-    cache: CacheConfig
-    parallel: boolean
-    maxConcurrency: number
 }
 
 export interface AuthPattern {
@@ -106,40 +102,7 @@ export interface QualityThresholds {
     security: number
     performance: number
     maintainability: number
-    testCoverage: number
     complexity: number
-}
-
-export interface CacheConfig {
-    enabled: boolean
-    ttl: number
-    directory: string
-}
-
-export interface AnalysisContext {
-    config: AnalyzerConfig
-    startTime: number
-    processedFiles: number
-    totalFiles: number
-    errors: AnalysisError[]
-}
-
-export interface AnalysisError {
-    file: string
-    error: string
-    severity: "warning" | "error"
-}
-
-export interface AnalyzerPlugin {
-    name: string
-    version: string
-    analyze(route: ApiRouteInfo, content: string, context: AnalysisContext): Promise<PluginResult>
-}
-
-export interface PluginResult {
-    recommendations: Recommendation[]
-    metrics: Record<string, number>
-    metadata: Record<string, any>
 }
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS"

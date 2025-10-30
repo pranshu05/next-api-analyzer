@@ -1,5 +1,5 @@
-import fs from "fs"
-import path from "path"
+import fs from "node:fs"
+import path from "node:path"
 import ts from "typescript"
 import type { ApiRouteInfo, ApiAnalysisResult, AnalyzerConfig, Recommendation } from "../types"
 import { DEFAULT_CONFIG } from "../config/default-config"
@@ -10,7 +10,7 @@ import { PerformanceAnalyzer } from "../analyzers/performance-analyzer"
 import { getScoreColor, getSeverityWeight } from "../utils/common"
 
 export class NextApiAnalyzer {
-    private config: AnalyzerConfig
+    private readonly config: AnalyzerConfig
     private routes: ApiRouteInfo[] = []
     private startTime = 0
 
@@ -109,7 +109,7 @@ export class NextApiAnalyzer {
             summary,
             metadata: {
                 analyzedAt: new Date(),
-                version: "3.1.0",
+                version: "4.0.0",
                 duration,
                 totalFiles: this.routes.length,
                 totalLinesOfCode: this.routes.reduce((sum, route) => sum + (route.linesOfCode || 0), 0),

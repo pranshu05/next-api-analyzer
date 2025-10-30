@@ -1,14 +1,15 @@
-import fs from "fs/promises"
-import path from "path"
+import fs from "node:fs/promises"
+import path from "node:path"
 import { glob } from "glob"
-import crypto from "crypto"
 import type { AnalyzerConfig } from "../types"
 import { logger } from "./logger"
 
 export class FileUtils {
     static async findApiFiles(config: AnalyzerConfig): Promise<string[]> {
         try {
-            const patterns = config.includePatterns.map((pattern) => path.join(config.apiDir, pattern).replace(/\\/g, "/"))
+            const patterns = config.includePatterns.map((pattern) =>
+                path.join(config.apiDir, pattern).replace(/\\/g, "/"),
+            )
 
             const allFiles: string[] = []
             for (const pattern of patterns) {
@@ -30,7 +31,7 @@ export class FileUtils {
 
     static isApiFile(filename: string): boolean {
         const basename = path.basename(filename)
-        const isTypeScriptOrJavaScript = /\.(js|ts|tsx)$/.test(basename)
+        const isTypeScriptOrJavaScript = /\.(js|ts)$/.test(basename)
         const isRouteFile = basename === "route.js" || basename === "route.ts"
         const isInApiDirectory = filename.includes("/api/") || filename.includes("\\api\\")
 
@@ -71,30 +72,14 @@ export class FileUtils {
         }
     }
 
-    static async writeJsonFile(filePath: string, data: any): Promise<void> {
+    static async writeJsonFile(filePath: string, data: unknown): Promise<void> {
         await this.ensureDirectoryExists(path.dirname(filePath))
         await fs.writeFile(filePath, JSON.stringify(data, null, 2), "utf-8")
-    }
-
-    static async readJsonFile<T>(filePath: string): Promise<T | null> {
-        try {
-            const content = await fs.readFile(filePath, "utf-8")
-            return JSON.parse(content) as T
-        } catch (error) {
-            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-                return null
-            }
-            throw error
-        }
     }
 
     static async writeFile(filePath: string, content: string): Promise<void> {
         await this.ensureDirectoryExists(path.dirname(filePath))
         await fs.writeFile(filePath, content, "utf-8")
-    }
-
-    static generateHash(content: string): string {
-        return crypto.createHash("md5").update(content).digest("hex")
     }
 
     static async fileExists(filePath: string): Promise<boolean> {
