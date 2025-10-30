@@ -1,6 +1,6 @@
 {
     "name": "next-api-analyzer",
-    "version": "4.0.0",
+    "version": "4.0.1",
     "description": "Minimal, efficient Next.js API analyzer with Postman-ready testing guides for security, performance, and maintainability",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",

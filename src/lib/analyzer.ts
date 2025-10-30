@@ -109,7 +109,7 @@ export class NextApiAnalyzer {
             summary,
             metadata: {
                 analyzedAt: new Date(),
-                version: "4.0.0",
+                version: "4.0.1",
                 duration,
                 totalFiles: this.routes.length,
                 totalLinesOfCode: this.routes.reduce((sum, route) => sum + (route.linesOfCode || 0), 0),

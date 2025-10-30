@@ -13,7 +13,7 @@ const program = new Command()
 program
     .name("next-api-analyzer")
     .description("Next.js API routes analyzer")
-    .version("4.0.0")
+    .version("4.0.1")
 
 program
     .command("analyze")
